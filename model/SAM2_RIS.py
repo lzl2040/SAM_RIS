@@ -113,7 +113,7 @@ class SAM2_RIS(nn.Module):
 
         return raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score
 
-    def forward(self, image, raw_imgs, blip2_imgs, masks, captions, step, epoch):
+    def forward(self, image, raw_imgs, blip2_imgs, masks, captions, step, epoch, multi_mask=False):
         """
         image: (B, 3, 1024, 1024)
         """
@@ -138,17 +138,14 @@ class SAM2_RIS(nn.Module):
             image_pe=self.sam2_model.sam_prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
-            multimask_output=False,
+            multimask_output=multi_mask,
             repeat_image=False,
             high_res_features=high_res_features,
         )
 
         # BT 1 H W
-        low_res_masks_logits = F.interpolate(low_res_masks_logits, (self.target_size, self.target_size),
+        masks_logits = F.interpolate(low_res_masks_logits, (self.target_size, self.target_size),
                                              mode="bilinear", align_corners=False)
-
-        scores = None
-        neg_multi_modal_embed, gt_mask_queries = None, None
 
         if self.args.train_visual and step % self.args.save_visual_interval == 0:
             visual_save_path = os.path.join(self.save_path, "visual")
@@ -198,7 +195,7 @@ class SAM2_RIS(nn.Module):
             plt.savefig(os.path.join(save_path, "feature.jpg"), dpi=300)
             plt.close()
 
-        return low_res_masks_logits, multi_modal_embed, neg_multi_modal_embed, gt_mask_queries, object_score_logits
+        return masks_logits, low_res_masks_logits, multi_modal_embed, object_score_logits, iou_predictions
 
     def _image_encoder(self, input_image, multimodal_queries=None, is_memory=False):
         backbone_out = self.sam2_model.forward_image(input_image, multimodal_queries)

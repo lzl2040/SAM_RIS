@@ -7,6 +7,7 @@ from torchvision import transforms
 import numpy as np
 from PIL import Image
 from data.refer import REFER
+# https://github.com/mydcxiao/ReferSAM/blob/main/utils/transforms.py
 import data.transforms as T
 
 from args import get_parser
@@ -54,11 +55,15 @@ class ReferDataset(data.Dataset):
 
         self.classes = []
         self.image_transforms = image_transforms
-        self.target_transform = target_transforms
+        self.target_transforms = target_transforms
         self.split = split
         self.refer = REFER(args.refer_data_root, args.dataset, args.splitBy)
         self.blip2_transforms = BlipImageTrainProcessor(image_size=224)
-        self.resize_transform = transforms.Resize((1024, 1024))
+        self.resize_transform = transforms.Resize((args.image_size, args.image_size))
+        # self.resize_transform = T.Compose([T.ResizeLongestSide(args.image_size // 4),
+        #                  T.ToTensor(),
+        #                  T.Pad(args.image_size // 4)
+        #                  ])
 
         if args.ref_image_combined_pretrain:
             self.max_tokens = 22
@@ -105,7 +110,10 @@ class ReferDataset(data.Dataset):
         this_img = self.refer.Imgs[this_img_id[0]]
 
         img = Image.open(os.path.join(self.refer.IMAGE_DIR, this_img['file_name'])).convert("RGB")
-        raw_img = np.array(self.resize_transform(img))
+        np_img = np.array(img)
+        org_size = img.size # w h
+        imgs_wo_trans = np.array(self.resize_transform(img)) # for visualize
+        # imgs_wo_trans = self.resize_transform(np_img).permute(1, 2, 0).numpy() # from referSAM
         blip2_img = self.blip2_transforms(img)
 
         ref = self.refer.loadRefs(this_ref_id)
@@ -115,32 +123,64 @@ class ReferDataset(data.Dataset):
         annot[ref_mask == 1] = 1
 
         annot = Image.fromarray(annot.astype(np.uint8), mode="P")
+        raw_target = np.array(annot)
 
         if self.image_transforms is not None:
-            # resize, from PIL to tensor, and mean and std normalization
             img, target = self.image_transforms(img, annot)
 
+        # from refer SAM #
+        # if self.image_transforms is not None:
+        #     img = self.image_transforms(np_img)
+        #
+        # if self.target_transforms is not None:
+        #     target = self.target_transforms(target)
+        # from refer SAM #
+
         if self.eval_mode:
-            captions = self.captions[index]
+            captions_list = self.captions[index]
+            captions = "#####".join(captions_list)
+            # captions = self.captions[index]
         else:
 
             caption_id = np.random.choice(len(self.captions[index]))
             captions = self.captions[index][caption_id]
 
         # return img, target, tensor_embeddings, attention_mask
-        return img, target, captions, blip2_img, raw_img
+        info = {}
+        if self.eval_mode:
+            info["org_size"] = torch.as_tensor(org_size)
+            info["raw_masks"] = raw_target
+            info["raw_imgs"] = np_img
+        return img, target, captions, blip2_img, imgs_wo_trans, info
 
 if __name__ == '__main__':
-    tr = T.Compose([T.Resize(args.img_size, args.img_size),
-                  T.ToTensor(),
-                  T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                  ])
-    dataset = ReferDataset(args, image_transforms=tr, eval_mode=False)
-    loaders = DataLoader(dataset, batch_size=2)
-    for img, target, captions, blip2_img, raw_img in loaders:
-        print(captions)
+    # from referSAM #
+    # im_tr = T.Compose([T.ResizeLongestSide(args.image_size),
+    #                     T.Normalize(),
+    #                     T.ToTensor(),
+    #                     T.Pad(args.image_size)
+    #                     ])
+    # target_tr = T.Compose([T.ResizeLongestSide(args.image_size // 4),
+    #                      T.ToTensor(),
+    #                      T.Pad(args.image_size // 4)
+    #                      ])
+    # from referSAM #
+    im_tr = T.Compose([T.Resize(args.image_size, args.image_size),
+                      T.ToTensor(),
+                      T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # only normalize image
+                 ])
+    target_tr = None
+    dataset = ReferDataset(args, image_transforms=im_tr, target_transforms=target_tr, eval_mode=True)
+    loaders = DataLoader(dataset, batch_size=1)
+    for img, target, captions, blip2_img, raw_img, info in loaders:
+        # print(captions)
+        for caption in captions:
+            object_caption = caption.split("#####")
+            print(object_caption)
         print(blip2_img.shape)
         print(img.shape)
         print(target.shape)
         print(raw_img.shape)
+        raw_img = raw_img.detach().numpy()
+        print(info["raw_masks"].shape)
         break

@@ -14,18 +14,12 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
 import os
+import logging
 from model.SAM2_RIS import SAM2_RIS
 from sam2.build_sam import build_sam2
 import data.transforms as T
-PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
-config2model_path = {
-    "sam2_hiera_b+.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt",
-    "sam2_hiera_s.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_small.pt",
-    "sam2.1_hiera_s.yaml" : f"{PRETRAIN_WEIGHT_ROOT}/sam2.1_hiera_small.pt",
-    "sam2.1_hiera_b+.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2.1_hiera_base_plus.pt",
-    "sam2.1_hiera_l.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2.1_hiera_large.pt",
-}
-
+from config import config2model_path
+from utils.logger_utils import get_logger
 
 
 def set_seed(seed):
@@ -39,7 +33,7 @@ def set_seed(seed):
 def get_transform(args):
     transforms = [T.Resize(args.image_size, args.image_size),
                       T.ToTensor(),
-                      T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                      T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # only normalize image
                  ]
 
     return T.Compose(transforms)
@@ -57,6 +51,14 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     args.pretrain_model_path = config2model_path[args.model_cfg]
+    os.makedirs(args.log_path, exist_ok=True)
+    args.log_path = os.path.join(args.log_path, f"{args.task_name}.txt")
+
+    # ---------------- start writing logs ----------------------#
+    logger = get_logger(args.log_path)
+    for arg in vars(args):
+        logger.info(f'{arg}: {getattr(args, arg)}')
+    # ---------------- end writing logs ----------------------#
 
     # 多卡
     if args.distributed:
@@ -155,19 +157,19 @@ def main():
         epoch_loss = 0
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        for step, (imgs, target, captions, blip2_imgs, raw_imgs) in enumerate(tqdm(train_loader)):
+        for step, (imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(train_loader)):
             imgs, masks, blip2_imgs = imgs.to(device), target.to(device), blip2_imgs.to(device)
             # print(imgs.shape, masks.shape, blip2_imgs.shape, raw_imgs.shape)
             # imgs = rearrange(imgs, "b t c h w -> (b t) c h w")
             masks = rearrange(masks, "b h w -> b 1 h w")
             # blip2_imgs = rearrange(blip2_imgs, "b c h w -> b h w c")
             with torch.cuda.amp.autocast():
-                sam_pred, query_embeds, neg_query_embeds, gt_mask_queries, object_score_logits = sam_ris_model(imgs, raw_imgs, blip2_imgs, masks, captions, step, epoch)
-                loss = seg_loss(sam_pred, masks) + ce_loss(sam_pred, masks.float())
+                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
+                loss = seg_loss(pred_logits, masks) + ce_loss(pred_logits, masks.float())
 
                 loss_avg.update(loss.item(), imgs.shape[0])
                 if step % args.print_interval == 0 and local_rank == 0:
-                    print(f"Epoch: {epoch}/{num_epochs} Step:{step}/{len(train_loader)} Lr:{optimizer.param_groups[0]['lr']} "
+                    logger.info(f"Epoch: {epoch}/{num_epochs} Step:{step}/{len(train_loader)} Lr:{optimizer.param_groups[0]['lr']} "
                           f"Loss:{loss_avg.val}/{loss_avg.avg}")
                 loss = loss / args.grad_accumulation_steps
 
@@ -185,13 +187,13 @@ def main():
         losses.append(epoch_loss)
 
         if local_rank == 0:
-            print(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
+            logger.info(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
             ## save the latest model
             model_dict = sam_ris_model.state_dict()
             save_dict = {k: v for k, v in model_dict.items() if 'mask_decoder' in k or 'Qformer' in k
                          or 'resizer' in k or 'fusion' in k or 'score' in k or "obj_ptr_proj" in k
                          or "lora" in k}
-            print(save_dict.keys())
+            logger.info(save_dict.keys())
             checkpoint = {
                 "model": save_dict,
                 "optimizer": optimizer.state_dict(),

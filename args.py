@@ -253,8 +253,10 @@ def get_parser():
     parser.add_argument("-pretrain_model_path", type=str,
                         default="/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt")
     parser.add_argument("-blip2_path", type=str,
-                        default="/home/v-zuoleili/Pretrain/instruct_blip_vicuna7b_trimmed.pth")
+                        default="/data/lizuolei/pretrain/torch/hub/checkpoints/instruct_blip_vicuna7b_trimmed.pth")
     parser.add_argument("-work_dir", type=str, default="./work_dir")
+    parser.add_argument("--log_path", type=str, default="./log_path")
+    parser.add_argument("--pred_save_dir", type=str, default="./pred_visual")
     # train
     parser.add_argument("-num_epochs", type=int, default=1000)
     parser.add_argument("-batch_size", type=int, default=2)
@@ -287,7 +289,7 @@ def get_parser():
     parser.add_argument("-save_visual_interval", type=int, default=1000)
     parser.add_argument("-distributed", action='store_true')
     
-    parser.add_argument('--refer_data_root', default='/home/v-zuoleili/Data/coco', help='REFER dataset root directory')
+    parser.add_argument('--refer_data_root', default='/data/lizuolei/data/coco', help='REFER dataset root directory')
     parser.add_argument('--dataset', default='refcoco', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
                                                              'refs+ytvos')
 
