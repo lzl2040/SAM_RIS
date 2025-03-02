@@ -9,7 +9,7 @@ from torch.cuda.amp import GradScaler
 from einops import rearrange
 from timm.utils import AverageMeter
 from torch.utils.data import DataLoader
-import datetime
+from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
@@ -17,11 +17,11 @@ import os
 from model.SAM2_RIS import SAM2_RIS
 from sam2.build_sam import build_sam2
 import data.transforms as T
-
+PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
 config2model_path = {
     "sam2_hiera_b+.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt",
     "sam2_hiera_s.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_small.pt",
-    "sam2.1_hiera_s.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2.1_hiera_small.pt",
+    "sam2.1_hiera_s.yaml" : f"{PRETRAIN_WEIGHT_ROOT}/sam2.1_hiera_small.pt",
     "sam2.1_hiera_b+.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2.1_hiera_base_plus.pt",
     "sam2.1_hiera_l.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2.1_hiera_large.pt",
 }
@@ -142,7 +142,6 @@ def main():
         run_id = datetime.now().strftime("%Y%m%d-%H%M")
         model_save_path = os.path.join(args.work_dir, args.task_name + "-" + run_id)
         os.makedirs(model_save_path, exist_ok=True)
-
     if args.pretrain is not None:
         checkpoint = torch.load(args.pretrain, map_location="cpu")
         sam_ris_model.load_state_dict(checkpoint["model"], strict=False)

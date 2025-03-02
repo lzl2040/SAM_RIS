@@ -1,0 +1,12 @@
+einops
+timm
+hydra-core
+pandas
+decord
+transformers
+easydict
+pycocoevalcap
+diffusers
+IPython
+h5py
+nltk

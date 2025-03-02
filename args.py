@@ -111,7 +111,6 @@ def get_parser():
                         help='If true, pin memory when using the data loader.')
     parser.add_argument('--pretrained_swin_weights', default='',
                         help='path to pre-trained Swin backbone weights')
-    parser.add_argument("--blip2_path", default="/data/lizuolei/pretrain/torch/hub/checkpoints/instruct_blip_vicuna7b_trimmed.pth")
     parser.add_argument('--pretrained2d_lavt_weights', default='',
                         help='if non-empty, then this is the path to weights of an'
                              'image LAVT model pre-trained on image datasets. Note that this is NOT'
@@ -136,11 +135,9 @@ def get_parser():
                              'learning less challenging.')
     parser.add_argument('--ref_image_combined_pretrain', action='store_true',
                         help='If true, train image LAVT on three combined RefCOCO/+/g datasets.')
-    parser.add_argument('--refer_data_root', default='/data/lizuolei/data/coco/', help='REFER dataset root directory')
     parser.add_argument('--res', action='store_true', help='Only relevant if --seq_t_pwam or --sep_seq_t_pwam'
                                                            'is specified.'
                                                            'If true, use P3D-C variant with a residual connection')
-    parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--sample_3', action='store_true',
                         help='only relevant to the JHMDB dataset. If true, uniformly sample 3 frames per video for'
                              'inference.')
@@ -251,12 +248,12 @@ def get_parser():
 
     # add
     parser.add_argument("-task_name", type=str,
-                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-Lr-Step-AMP-E-35-All-Data-COCO")
+                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-Lr-Step-AMP-E-40-RefCOCO")
     parser.add_argument("-model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
     parser.add_argument("-pretrain_model_path", type=str,
                         default="/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt")
     parser.add_argument("-blip2_path", type=str,
-                        default="/data/lizuolei/pretrain/torch/hub/checkpoints/instruct_blip_vicuna7b_trimmed.pth")
+                        default="/home/v-zuoleili/Pretrain/instruct_blip_vicuna7b_trimmed.pth")
     parser.add_argument("-work_dir", type=str, default="./work_dir")
     # train
     parser.add_argument("-num_epochs", type=int, default=1000)
@@ -289,7 +286,8 @@ def get_parser():
     parser.add_argument("-train_visual", action='store_true')
     parser.add_argument("-save_visual_interval", type=int, default=1000)
     parser.add_argument("-distributed", action='store_true')
-
+    
+    parser.add_argument('--refer_data_root', default='/home/v-zuoleili/Data/coco', help='REFER dataset root directory')
     parser.add_argument('--dataset', default='refcoco', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
                                                              'refs+ytvos')
 
