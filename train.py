@@ -35,15 +35,19 @@ def get_transform(args):
                       T.ToTensor(),
                       T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # only normalize image
                  ]
+    cnn_transform = [T.Resize(args.cnn_img_size, args.cnn_img_size),
+                      T.ToTensor(),
+                      T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                    ]
+    return T.Compose(transforms), T.Compose(cnn_transform)
 
-    return T.Compose(transforms)
-
-def get_dataset(image_set, transform, args):
+def get_dataset(image_set, transform, cnn_transform, args):
     from data.dataset_refer_bert import ReferDataset
     ds = ReferDataset(args,
                       split=image_set,
                       image_transforms=transform,
-                      target_transforms=None
+                      target_transforms=None,
+                      cnn_transform=cnn_transform
                       )
     return ds
 
@@ -108,8 +112,10 @@ def main():
     losses = []
     best_loss = 1e10
 
+    image_transforms, cnn_transform = get_transform(args)
     train_dataset = get_dataset("train",
-                                       get_transform(args=args),
+                                       transform=image_transforms,
+                                       cnn_transform=cnn_transform,
                                        args=args)
 
     if local_rank == 0:
@@ -157,14 +163,15 @@ def main():
         epoch_loss = 0
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        for step, (imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(train_loader)):
+        for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(train_loader)):
             imgs, masks, blip2_imgs = imgs.to(device), target.to(device), blip2_imgs.to(device)
+            cnn_imgs = cnn_imgs.to(device)
             # print(imgs.shape, masks.shape, blip2_imgs.shape, raw_imgs.shape)
             # imgs = rearrange(imgs, "b t c h w -> (b t) c h w")
             masks = rearrange(masks, "b h w -> b 1 h w")
             # blip2_imgs = rearrange(blip2_imgs, "b c h w -> b h w c")
             with torch.cuda.amp.autocast():
-                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
+                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
                 loss = seg_loss(pred_logits, masks) + ce_loss(pred_logits, masks.float())
 
                 loss_avg.update(loss.item(), imgs.shape[0])

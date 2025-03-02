@@ -50,12 +50,14 @@ class ReferDataset(data.Dataset):
                  args,
                  image_transforms=None,
                  target_transforms=None,
+                 cnn_transform = None,
                  split='train',
                  eval_mode=False):
 
         self.classes = []
         self.image_transforms = image_transforms
         self.target_transforms = target_transforms
+        self.cnn_transform = cnn_transform
         self.split = split
         self.refer = REFER(args.refer_data_root, args.dataset, args.splitBy)
         self.blip2_transforms = BlipImageTrainProcessor(image_size=224)
@@ -65,10 +67,10 @@ class ReferDataset(data.Dataset):
         #                  T.Pad(args.image_size // 4)
         #                  ])
 
-        if args.ref_image_combined_pretrain:
-            self.max_tokens = 22
-        else:
-            self.max_tokens = 20
+        # if args.ref_image_combined_pretrain:
+        #     self.max_tokens = 22
+        # else:
+        #     self.max_tokens = 20
 
         ref_ids = self.refer.getRefIds(split=self.split)
         img_ids = self.refer.getImgIds(ref_ids)
@@ -125,6 +127,9 @@ class ReferDataset(data.Dataset):
         annot = Image.fromarray(annot.astype(np.uint8), mode="P")
         raw_target = np.array(annot)
 
+        if self.cnn_transform is not None:
+            cnn_img, _ = self.cnn_transform(img, annot)
+
         if self.image_transforms is not None:
             img, target = self.image_transforms(img, annot)
 
@@ -151,7 +156,7 @@ class ReferDataset(data.Dataset):
             info["org_size"] = torch.as_tensor(org_size)
             info["raw_masks"] = raw_target
             info["raw_imgs"] = np_img
-        return img, target, captions, blip2_img, imgs_wo_trans, info
+        return img, cnn_img, target, captions, blip2_img, imgs_wo_trans, info
 
 if __name__ == '__main__':
     # from referSAM #

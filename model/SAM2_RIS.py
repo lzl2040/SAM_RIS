@@ -9,7 +9,7 @@ from PIL import Image
 import random
 from einops import rearrange, repeat
 import torch.nn.functional as F
-
+import timm
 from utils.visual import draw_contours
 
 
@@ -53,6 +53,36 @@ class FeatureResizer(nn.Module):
         output = self.dropout(x)
         return output
 
+class CNNTokenGenration(nn.Module):
+    def __init__(self, feature_channels = [256, 512, 1024, 2048], latent_dim = 64, grid_size = 7, cnn_feature_num = 4):
+        super().__init__()
+        self.conv = nn.ModuleList(
+            [
+                nn.Sequential(
+                    *[
+                        nn.Conv2d(
+                            feature_channels[i],
+                            latent_dim,
+                            kernel_size=1,
+                            stride=1,
+                            padding=0,
+                            bias=True,
+                        ),
+                        nn.GELU(),
+                        nn.Conv2d(
+                            latent_dim,
+                            latent_dim,
+                            kernel_size=3,
+                            stride=1,
+                            padding=1,
+                            bias=False,
+                        ),
+                        nn.AdaptiveAvgPool2d(grid_size),
+                    ]
+                )
+                for i in range(cnn_feature_num)
+            ]
+        )
 
 class SAM2_RIS(nn.Module):
     def __init__(self, model, args, target_size=1024, device="cuda:0"):
@@ -60,13 +90,19 @@ class SAM2_RIS(nn.Module):
         self.device = device
         self.sam2_model = model
         self.blip2_qformer = load_blip2_qformer(args.blip2_path).to(self.device)
-
         # multi model queries
         self.query_resizer = FeatureResizer(
             input_feat_size=768,
             output_feat_size=256,
             dropout=0,
         )
+        self.cnn_extractor = timm.create_model(
+            "resnet50",
+            pretrained=True,
+            features_only=True,
+            out_indices=[1, 2, 3, 4],
+        )
+        self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
         self.target_size = args.image_size
         # 特征大小
         feat_sizes = [256 // 2 ** i * self.target_size // 1024 for i in range(3)]
@@ -113,10 +149,25 @@ class SAM2_RIS(nn.Module):
 
         return raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score
 
-    def forward(self, image, raw_imgs, blip2_imgs, masks, captions, step, epoch, multi_mask=False):
+    def generate_cnn_tokens(self, feature_list):
+        batch_size = feature_list[0].shape[0]
+        cnn_token_list = []
+        for i in range(len(feature_list)):
+            cnn_image_token = self.cnn_token_generator.conv[i](feature_list[i])
+            latent_dim = cnn_image_token.shape[1]
+            cnn_image_token = cnn_image_token.permute(0, 2, 3, 1).reshape(
+                batch_size, -1, latent_dim
+            )
+            cnn_token_list.append(cnn_image_token)
+        return torch.cat(cnn_token_list, dim=1)
+
+    def forward(self, image, cnn_image, raw_imgs, blip2_imgs, masks, captions, step, epoch, multi_mask=False):
         """
         image: (B, 3, 1024, 1024)
         """
+        feature_list = self.cnn_extractor(cnn_image)
+        cnn_tokens = self.generate_cnn_tokens(feature_list)
+        # print(cnn_tokens.shape) # 4 N=196 C=64
         raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score = self.generate_queries(blip2_imgs=blip2_imgs,
                                                                           repeat_catpipns=captions)
 
