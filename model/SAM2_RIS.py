@@ -114,6 +114,11 @@ class SAM2_RIS(nn.Module):
         self.focal_gamma_obj_score = 2
 
         self.args = args
+
+        # freeze cnn encoder
+        for param in self.cnn_extractor.parameters():
+            param.requires_grad = False
+
         # freeze prompt encoder
         for param in self.sam2_model.sam_prompt_encoder.parameters():
             param.requires_grad = False
@@ -171,7 +176,7 @@ class SAM2_RIS(nn.Module):
         raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score = self.generate_queries(blip2_imgs=blip2_imgs,
                                                                           repeat_catpipns=captions)
 
-        _features, vision_feats, vision_pos_embeds, query = self._image_encoder(image, raw_multimodal_queries)
+        _features, vision_feats, vision_pos_embeds, query = self._image_encoder(image, raw_multimodal_queries, cnn_tokens)
 
         img_embed, high_res_features = _features["image_embed"], _features["high_res_feats"]
 
@@ -194,16 +199,16 @@ class SAM2_RIS(nn.Module):
             high_res_features=high_res_features,
         )
 
-        # BT 1 H W
+        # B 1 H W
         masks_logits = F.interpolate(low_res_masks_logits, (self.target_size, self.target_size),
                                              mode="bilinear", align_corners=False)
 
         if self.args.train_visual and step % self.args.save_visual_interval == 0:
             visual_save_path = os.path.join(self.save_path, "visual")
             os.makedirs(visual_save_path, exist_ok=True)
-            save_pred_mask = torch.zeros_like(low_res_masks_logits)
-            print(torch.max(low_res_masks_logits[0]), torch.min(low_res_masks_logits[0]))
-            save_pred_mask[low_res_masks_logits > 0.5] = 1
+            save_pred_mask = torch.zeros_like(masks_logits)
+            print(torch.max(masks_logits[0]), torch.min(masks_logits[0]))
+            save_pred_mask[masks_logits > 0.5] = 1
             save_pred_mask = save_pred_mask[1].detach().cpu().numpy()
             gt_mask = masks[1].detach().cpu().numpy()
             select_img = raw_imgs[1].detach().cpu().numpy()
@@ -248,8 +253,8 @@ class SAM2_RIS(nn.Module):
 
         return masks_logits, low_res_masks_logits, multi_modal_embed, object_score_logits, iou_predictions
 
-    def _image_encoder(self, input_image, multimodal_queries=None, is_memory=False):
-        backbone_out = self.sam2_model.forward_image(input_image, multimodal_queries)
+    def _image_encoder(self, input_image, multimodal_queries=None, cnn_tokens = None, is_memory=False):
+        backbone_out = self.sam2_model.forward_image(input_image, multimodal_queries, cnn_tokens)
         # print(backbone_out[0].shape, backbone_out[1].shape)
         # 选择哪几个层次的特征用来处理
         _, vision_feats, vision_pos_embeds, _ = self.sam2_model._prepare_backbone_features(backbone_out)

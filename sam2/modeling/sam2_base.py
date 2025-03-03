@@ -520,9 +520,9 @@ class SAM2Base(torch.nn.Module):
 
         return _features, vision_feats, vision_pos_embeds
 
-    def forward_image(self, img_batch: torch.Tensor, multimodal_queries = None):
+    def forward_image(self, img_batch: torch.Tensor, multimodal_queries = None, cnn_tokens = None):
         """Get the image feature on the input batch."""
-        backbone_out = self.image_encoder(img_batch, multimodal_queries)
+        backbone_out = self.image_encoder(img_batch, multimodal_queries, cnn_tokens)
         if self.use_high_res_features_in_sam:
             # precompute projected level 0 and level 1 features in SAM decoder
             # to avoid running it again on every SAM click

@@ -15,12 +15,12 @@ def get_parser():
 
     # add
     parser.add_argument("-task_name", type=str,
-                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-Lr-Step-AMP-E-40-RefCOCO")
+                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-RefCOCO")
     parser.add_argument("-model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
     parser.add_argument("-pretrain_model_path", type=str,
                         default="/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt")
     parser.add_argument("-blip2_path", type=str,
-                        default="/data/lizuolei/pretrain/torch/hub/checkpoints/instruct_blip_vicuna7b_trimmed.pth")
+                        default="/home/v-zuoleili/Pretrain/instruct_blip_vicuna7b_trimmed.pth")
     parser.add_argument("-work_dir", type=str, default="./work_dir")
     parser.add_argument("--log_path", type=str, default="./log_path")
     parser.add_argument("--pred_save_dir", type=str, default="./pred_visual")
@@ -28,7 +28,7 @@ def get_parser():
     parser.add_argument("-num_epochs", type=int, default=1000)
     parser.add_argument("-batch_size", type=int, default=2)
     parser.add_argument("-bbox_shift", type=int, default=5)
-    parser.add_argument("-num_workers", type=int, default=2)
+    parser.add_argument("-workers", type=int, default=2)
     parser.add_argument("-lora_rank", type=int, default=8)
     # Optimizer parameters
     parser.add_argument("-weight_decay", type=float, default=0.01, help="weight decay (default: 0.01)")
@@ -43,7 +43,7 @@ def get_parser():
     parser.add_argument('-image_size', type=int, default=1024, help='image_size')
     parser.add_argument("-cnn_img_size", type=int, default=480, help='cnn_img_size')
     parser.add_argument('-ytvos_path', type=str, default='/data/lizuolei/data/ref-youtube-vos/')
-    parser.add_argument('-coco_path', type=str, default='/data/lizuolei/data/coco/')
+    parser.add_argument('-coco_path', type=str, default='/home/v-zuoleili/Data/coco/')
     parser.add_argument('-masks', action='store_true',
                         help="Train segmentation head if the flag is provided")
     parser.add_argument('-num_frames', default=3, type=int,
@@ -57,7 +57,7 @@ def get_parser():
     parser.add_argument("-save_visual_interval", type=int, default=1000)
     parser.add_argument("-distributed", action='store_true')
     
-    parser.add_argument('--refer_data_root', default='/data/lizuolei/data/coco', help='REFER dataset root directory')
+    parser.add_argument('--refer_data_root', default='/home/v-zuoleili/Data/coco', help='REFER dataset root directory')
     parser.add_argument('--dataset', default='refcoco', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
                                                              'refs+ytvos')
 

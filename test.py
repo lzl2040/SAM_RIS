@@ -35,14 +35,20 @@ def get_transform(args):
                       T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # only normalize image
                  ]
 
-    return T.Compose(transforms), None
+    cnn_transform = [T.Resize(args.cnn_img_size, args.cnn_img_size),
+                      T.ToTensor(),
+                      T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                    ]
 
-def get_dataset(image_set, image_transforms, target_transforms, args, eval_mode=False):
+    return T.Compose(transforms), T.Compose(cnn_transform)
+
+def get_dataset(image_set, image_transforms, target_transforms, cnn_transforms, args, eval_mode=False):
     from data.dataset_refer_bert import ReferDataset
     ds = ReferDataset(args,
                       split=image_set,
                       image_transforms=image_transforms,
                       target_transforms=target_transforms,
+                      cnn_transform=cnn_transforms,
                       eval_mode=eval_mode,
                       )
     return ds
@@ -58,14 +64,14 @@ def test_model(model, data_loader, device, logger, save_path):
     pred_iou = 0
     miou_avg = AverageMeter()
     with torch.no_grad():
-        for step, (imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(data_loader)):
+        for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(data_loader)):
             imgs, target, blip2_imgs = imgs.to(device), target.to(device), blip2_imgs.to(device)
             captions = captions[0].split("#####")
             org_W, org_H = info["org_size"][0]
             org_mask = info["raw_masks"].unsqueeze(0)
             org_img = info["raw_imgs"]
             for obj_cap in captions:
-                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = model(imgs, imgs_wo_trans, blip2_imgs,
+                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs,
                                                                                          target, obj_cap, step, 0, multi_mask=False)
                 # ---------------- from referSAM ----------------------#
                 # low_res_masks = torch.where(low_pred_logits > 0.0, 1.0, 0.0)
@@ -134,27 +140,29 @@ def test_model(model, data_loader, device, logger, save_path):
     # mean_IoU = np.array(mean_IoU)
     mIoU = miou_avg.avg
     oIoU = cum_I / cum_U
-    logger.info('Final results:')
-    logger.info('Mean IoU is %.2f\n' % (mIoU * 100.))
-    logger.info('Overall IoU is %.2f\n' % (oIoU * 100.))
+    res_str = ""
+    res_str += 'Final results:\n'
+    res_str += 'Mean IoU is %.2f\n' % (mIoU * 100.)
+    res_str += 'Overall IoU is %.2f\n' % (oIoU * 100.)
 
     for n_eval_iou in range(len(eval_seg_iou_list)):
         precision = seg_correct[n_eval_iou] * 100. / seg_total
-        logger.info(f"Precision@{str(eval_seg_iou_list[n_eval_iou])}={precision:.2f}%\n")
-
+        res_str += f"Precision@{str(eval_seg_iou_list[n_eval_iou])}={precision:.2f}%\n"
+        # logger.info(f"Precision@{str(eval_seg_iou_list[n_eval_iou])}={precision:.2f}%\n")
+    logger.info(res_str)
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    args.log_path = os.path.join(args.log_path, f"{args.task_name}_test.txt")
+    args.log_path = os.path.join(args.log_path, f"{args.task_name}_test_e_38.txt")
     args.pretrain_model_path = config2model_path[args.model_cfg]
 
     logger = get_logger(args.log_path)
 
     device = torch.device(int(args.device))
-    image_transforms, target_transforms = get_transform(args)
+    image_transforms, cnn_transforms = get_transform(args)
 
-    dataset_test = get_dataset(args.split, image_transforms, target_transforms, args,
+    dataset_test = get_dataset(args.split, image_transforms, None, cnn_transforms, args,
                                eval_mode=True)
     test_sampler = torch.utils.data.SequentialSampler(dataset_test)
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1,

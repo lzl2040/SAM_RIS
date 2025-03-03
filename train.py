@@ -199,7 +199,7 @@ def main():
             model_dict = sam_ris_model.state_dict()
             save_dict = {k: v for k, v in model_dict.items() if 'mask_decoder' in k or 'Qformer' in k
                          or 'resizer' in k or 'fusion' in k or 'score' in k or "obj_ptr_proj" in k
-                         or "lora" in k}
+                         or "lora" in k or "cnn" in k}
             logger.info(save_dict.keys())
             checkpoint = {
                 "model": save_dict,

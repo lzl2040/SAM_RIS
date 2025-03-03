@@ -44,6 +44,59 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.
     attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
     return attn_weight @ value
 
+
+from timm.models.vision_transformer import Mlp
+class LocalTokenAdapter(nn.Module):
+    def __init__(self, sam_dim, dim, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
+        super().__init__()
+        self.sam_feat_down_proj = MLP(input_dim=sam_dim,
+                    hidden_dim=dim,
+                    output_dim=dim,
+                    num_layers=2)
+        self.sam_feat_up_proj = MLP(input_dim=dim,
+                    hidden_dim=sam_dim,
+                    output_dim=sam_dim,
+                    num_layers=2)
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim**-0.5
+
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, query, image_token):
+        # print(query.shape)
+        query = self.sam_feat_down_proj(query)
+        B, N, C = image_token.shape
+        kv = (
+            self.kv(image_token)
+            .reshape(B, N, 2, self.num_heads, C // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
+        k, v = kv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
+
+        B, N, C = query.shape
+        q = (
+            self.q(query)
+            .reshape(B, N, 1, self.num_heads, C // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
+        q = q[0]
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        x = self.sam_feat_up_proj(x)
+        return x
+
 class FeatureResizer(nn.Module):
     """
     This class takes as input a set of embeddings of dimension C1 and outputs a set of
@@ -344,6 +397,7 @@ class Hiera(nn.Module):
 
         self.vision_text_fusions = nn.ModuleList()
         pre_dim = 768
+        sam2_dims = []
         for i in range(depth):
             dim_out = embed_dim
             # lags by a block, so first block of
@@ -355,6 +409,7 @@ class Hiera(nn.Module):
                 window_size = 0 if i in self.global_att_blocks else window_size
 
             if i - 1 in self.stage_ends:
+                sam2_dims.append(dim_out)
                 # 视觉-语言融合，只在后三个层次的，选所有层次的多出600M内存
                 # if cur_stage > 1:
                 # multi-modal queries
@@ -382,6 +437,12 @@ class Hiera(nn.Module):
         # 最后一层
         fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
         self.vision_multi_modal_fusions.append(fusion_module)
+        sam2_dims.append(dim_out)
+        print(sam2_dims)
+
+        self.cnn2sam_fusion = nn.ModuleList([
+            LocalTokenAdapter(sam_dim=sam2_dim, dim=64, num_heads=4) for sam2_dim in sam2_dims
+        ])
 
         self.channel_list = (
             [self.blocks[i].dim_out for i in self.stage_ends[::-1]]
@@ -400,7 +461,7 @@ class Hiera(nn.Module):
         return pos_embed
 
 
-    def forward(self, x: torch.Tensor, multi_modal_queries = None) -> List[torch.Tensor]:
+    def forward(self, x: torch.Tensor, multi_modal_queries = None, cnn_tokens = None) -> List[torch.Tensor]:
         x = self.patch_embed(x)
         # x: (B, H, W, C)
 
@@ -414,8 +475,15 @@ class Hiera(nn.Module):
             if (i == self.stage_ends[-1]) or (
                 i in self.stage_ends and self.return_interm_layers
             ):
+                # reshape feats to B N C
+                B, H, W, C = x.shape
+                # print(x.shape)
+                feats = rearrange(x, "b h w c -> b (h w) c")
+                feats = self.cnn2sam_fusion[stage](feats, cnn_tokens)
+                feats = rearrange(feats, "b (h w) c -> b h w c", h = H, w=W)
                 # b c h w
-                feats = x.permute(0, 3, 1, 2)
+                feats = feats.permute(0, 3, 1, 2)
+                
                 # print(feats.shape)
                 # if stage > 1:
                 # 进行融合 multi-modal

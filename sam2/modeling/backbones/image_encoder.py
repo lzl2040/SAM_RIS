@@ -26,9 +26,9 @@ class ImageEncoder(nn.Module):
             self.trunk.channel_list == self.neck.backbone_channel_list
         ), f"Channel dims of trunk and neck do not match. Trunk: {self.trunk.channel_list}, neck: {self.neck.backbone_channel_list}"
 
-    def forward(self, sample: torch.Tensor, multi_modal_queries = None):
+    def forward(self, sample: torch.Tensor, multi_modal_queries = None, cnn_tokens = None):
         # Forward through backbone
-        trunk_feats, updated_query = self.trunk(sample, multi_modal_queries)
+        trunk_feats, updated_query = self.trunk(sample, multi_modal_queries, cnn_tokens)
         # print(updated_query.shape)
         features, pos = self.neck(trunk_feats)
         if self.scalp > 0:
