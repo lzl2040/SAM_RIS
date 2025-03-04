@@ -66,6 +66,7 @@ def test_model(model, data_loader, device, logger, save_path):
     with torch.no_grad():
         for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(data_loader)):
             imgs, target, blip2_imgs = imgs.to(device), target.to(device), blip2_imgs.to(device)
+            cnn_imgs = cnn_imgs.to(device)
             captions = captions[0].split("#####")
             org_W, org_H = info["org_size"][0]
             org_mask = info["raw_masks"].unsqueeze(0)

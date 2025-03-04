@@ -68,9 +68,18 @@ class LocalTokenAdapter(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+        self.gate = nn.Sequential(
+            nn.Linear(dim, dim, bias=False),
+            nn.ReLU(),
+            nn.Linear(dim, dim, bias=False),
+            # nn.Sigmoid()
+            # nn.Tanh()
+            nn.Tanh()
+        )
+
     def forward(self, query, image_token):
         # print(query.shape)
-        query = self.sam_feat_down_proj(query)
+        down_query = self.sam_feat_down_proj(query)
         B, N, C = image_token.shape
         kv = (
             self.kv(image_token)
@@ -79,9 +88,9 @@ class LocalTokenAdapter(nn.Module):
         )
         k, v = kv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
 
-        B, N, C = query.shape
+        B, N, C = down_query.shape
         q = (
-            self.q(query)
+            self.q(down_query)
             .reshape(B, N, 1, self.num_heads, C // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
@@ -94,8 +103,11 @@ class LocalTokenAdapter(nn.Module):
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        x = self.sam_feat_up_proj(x)
-        return x
+
+        update_down_query = down_query + self.gate(x) * x
+        up_query = self.sam_feat_up_proj(update_down_query)
+        query = query + up_query
+        return query
 
 class FeatureResizer(nn.Module):
     """
