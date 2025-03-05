@@ -10,3 +10,9 @@ diffusers
 IPython
 h5py
 nltk
+monai
+iopath
+opencv-python
+webdataset
+fairscale
+scikit-image

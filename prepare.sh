@@ -1,4 +1,5 @@
 # download data
+sudo apt install unzip
 mkdir Data
 cd Data
 mkdir coco
@@ -21,6 +22,10 @@ wget https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BL
 wget https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/InstructBLIP/instruct_blip_vicuna7b_trimmed.pt
 
 # create env
-cd /home/v-zuoleili
-wget https://repo.anaconda.com/archive/Anaconda3-2024.10-1-Linux-x86_64.sh
-bash Anaconda3-2024.10-1-Linux-x86_64.sh
+# cd /home/v-zuoleili
+# wget https://repo.anaconda.com/archive/Anaconda3-2024.10-1-Linux-x86_64.sh
+# bash Anaconda3-2024.10-1-Linux-x86_64.sh
+# conda create -n ris python=3.10
+# conda activate ris
+# pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2
+# pip install -r requirements.txt
