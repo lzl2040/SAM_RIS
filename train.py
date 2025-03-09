@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.cuda.amp import GradScaler
 from einops import rearrange
 from timm.utils import AverageMeter
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -43,12 +43,28 @@ def get_transform(args):
 
 def get_dataset(image_set, transform, cnn_transform, args):
     from data.dataset_refer_bert import ReferDataset
-    ds = ReferDataset(args,
-                      split=image_set,
-                      image_transforms=transform,
-                      target_transforms=None,
-                      cnn_transform=cnn_transform
+    if args.dataset == "all":
+        data_list = ["refcoco", "refcoco+", "refcocog", "refcocog"]
+        split_by = ["unc", "unc", "umd", "google"]
+        dataset_list = []
+        for i in range(len(data_list)):
+            args.dataset = data_list[i]
+            args.splitBy = split_by[i]
+            dataset = ReferDataset(args,
+                        split=image_set,
+                        image_transforms=transform,
+                        target_transforms=None,
+                        cnn_transform=cnn_transform
                       )
+            dataset_list.append(dataset)
+        ds = ConcatDataset(dataset_list)
+    else:
+        ds = ReferDataset(args,
+                        split=image_set,
+                        image_transforms=transform,
+                        target_transforms=None,
+                        cnn_transform=cnn_transform
+                        )
     return ds
 
 def main():

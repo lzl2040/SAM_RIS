@@ -15,7 +15,7 @@ def get_parser():
 
     # add
     parser.add_argument("-task_name", type=str,
-                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-RefCOCO")
+                        default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-All")
     parser.add_argument("-model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
     parser.add_argument("-pretrain_model_path", type=str,
                         default="/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt")
@@ -58,7 +58,7 @@ def get_parser():
     parser.add_argument("-distributed", action='store_true')
     
     parser.add_argument('--refer_data_root', default='/home/v-zuoleili/Data/coco', help='REFER dataset root directory')
-    parser.add_argument('--dataset', default='refcoco', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
+    parser.add_argument('--dataset', default='all', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
                                                              'refs+ytvos')
 
     parser.add_argument('--split', default='train', help='only used when testing')

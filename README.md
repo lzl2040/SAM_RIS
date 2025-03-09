@@ -1,5 +1,8 @@
 ## Preparation
-
+download huggingface token:
+```shell
+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
+```
 ## Run
 ### Train
 ```shell
