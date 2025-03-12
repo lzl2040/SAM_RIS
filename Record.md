@@ -41,6 +41,50 @@ Precision@0.8=66.43%
 Precision@0.9=37.96%
 ```
 
+所有数据混合训练：
+```shell
+E=4:
+Mean IoU is 72.57
+Overall IoU is 70.06
+Precision@0.5=81.55%
+Precision@0.6=77.60%
+Precision@0.7=72.10%
+Precision@0.8=61.68%
+Precision@0.9=33.85%
+E=6:
+Mean IoU is 74.16
+Overall IoU is 71.55
+Precision@0.5=83.35%
+Precision@0.6=79.52%
+Precision@0.7=74.74%
+Precision@0.8=65.05%
+Precision@0.9=35.88%
+E=8:
+Mean IoU is 74.45
+Overall IoU is 72.00
+Precision@0.5=83.34%
+Precision@0.6=80.01%
+Precision@0.7=75.20%
+Precision@0.8=65.57%
+Precision@0.9=36.81%
+E=10:
+Mean IoU is 75.05
+Overall IoU is 72.98
+Precision@0.5=84.50%
+Precision@0.6=81.35%
+Precision@0.7=76.31%
+Precision@0.8=66.37%
+Precision@0.9=37.11%
+E=12:
+Mean IoU is 75.65
+Overall IoU is 73.57
+Precision@0.5=84.85%
+Precision@0.6=81.47%
+Precision@0.7=76.92%
+Precision@0.8=67.37%
+Precision@0.9=38.54%
+```
+
 SAM2-B, 结合了CNN token来微调SAM2，Epoch=22：
 ```shell
 Mean IoU is 75.05
