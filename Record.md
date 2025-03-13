@@ -83,6 +83,14 @@ Precision@0.6=81.47%
 Precision@0.7=76.92%
 Precision@0.8=67.37%
 Precision@0.9=38.54%
+E=16:
+Mean IoU is 75.73
+Overall IoU is 73.61
+Precision@0.5=84.85%
+Precision@0.6=81.71%
+Precision@0.7=77.99%
+Precision@0.8=68.54%
+Precision@0.9=39.12%
 ```
 
 SAM2-B, 结合了CNN token来微调SAM2，Epoch=22：
