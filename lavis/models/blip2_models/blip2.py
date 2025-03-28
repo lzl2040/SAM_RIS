@@ -29,7 +29,7 @@ from transformers import BertTokenizer
 class Blip2Base(BaseModel):
     @classmethod
     def init_tokenizer(cls, truncation_side="right"):
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=True, truncation_side=truncation_side)
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False, truncation_side=truncation_side)
         tokenizer.add_special_tokens({"bos_token": "[DEC]"})
         return tokenizer
 
@@ -53,7 +53,7 @@ class Blip2Base(BaseModel):
         encoder_config.query_length = num_query_token
         # 先query+text id的self attention，然后是query和image embeds的cross-attention，如此重复
         Qformer = BertLMHeadModel.from_pretrained(
-            "bert-base-uncased", config=encoder_config, local_files_only=True
+            "bert-base-uncased", config=encoder_config, local_files_only=False
         )
         print("qformer over")
         query_tokens = nn.Parameter(

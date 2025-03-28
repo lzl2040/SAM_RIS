@@ -8,9 +8,9 @@ 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
 ```shell
 export HF_HOME="/your/custom/cache/directory"
 export TORCH_HOME="/your/custom/cache/directory"
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py -model_cfg sam2.1_hiera_s.yaml -num_epochs 40 -batch_size 16 -image_size 1024 -train_visual -distributed
+CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py -model_cfg sam2.1_hiera_s.yaml -num_epochs 40 -batch_size 16 -image_size 1024 -train_visual --dataset all -distributed
 ```
 ### Test
 ```shell
-python test.py -model_cfg sam2.1_hiera_s.yaml -device 0 --split val
+python test.py -model_cfg sam2.1_hiera_s.yaml -device 0 --split val --dataset refcoco+
 ```

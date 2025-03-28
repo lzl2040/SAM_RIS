@@ -44,13 +44,13 @@ Precision@0.9=37.96%
 所有数据混合训练：
 ```shell
 E=4:
-Mean IoU is 72.57
-Overall IoU is 70.06
-Precision@0.5=81.55%
-Precision@0.6=77.60%
-Precision@0.7=72.10%
-Precision@0.8=61.68%
-Precision@0.9=33.85%
+Mean IoU is 73.18
+Overall IoU is 70.50
+Precision@0.5=82.12%
+Precision@0.6=78.13%
+Precision@0.7=72.48%
+Precision@0.8=62.77%
+Precision@0.9=34.98%
 E=6:
 Mean IoU is 74.16
 Overall IoU is 71.55
@@ -60,13 +60,13 @@ Precision@0.7=74.74%
 Precision@0.8=65.05%
 Precision@0.9=35.88%
 E=8:
-Mean IoU is 74.45
-Overall IoU is 72.00
-Precision@0.5=83.34%
-Precision@0.6=80.01%
-Precision@0.7=75.20%
-Precision@0.8=65.57%
-Precision@0.9=36.81%
+Mean IoU is 75.16
+Overall IoU is 72.55
+Precision@0.5=84.15%
+Precision@0.6=80.52%
+Precision@0.7=75.88%
+Precision@0.8=66.73%
+Precision@0.9=38.21%
 E=10:
 Mean IoU is 75.05
 Overall IoU is 72.98
@@ -76,21 +76,85 @@ Precision@0.7=76.31%
 Precision@0.8=66.37%
 Precision@0.9=37.11%
 E=12:
-Mean IoU is 75.65
-Overall IoU is 73.57
-Precision@0.5=84.85%
-Precision@0.6=81.47%
-Precision@0.7=76.92%
-Precision@0.8=67.37%
-Precision@0.9=38.54%
+Mean IoU is 75.89
+Overall IoU is 73.59
+Precision@0.5=85.31%
+Precision@0.6=82.24%
+Precision@0.7=78.00%
+Precision@0.8=68.68%
+Precision@0.9=39.65%
+E=14:
+Mean IoU is 75.88
+Overall IoU is 73.60
+Precision@0.5=84.95%
+Precision@0.6=81.82%
+Precision@0.7=77.09%
+Precision@0.8=67.79%
+Precision@0.9=39.11%
 E=16:
-Mean IoU is 75.73
-Overall IoU is 73.61
-Precision@0.5=84.85%
-Precision@0.6=81.71%
-Precision@0.7=77.99%
-Precision@0.8=68.54%
-Precision@0.9=39.12%
+Mean IoU is 76.43
+Overall IoU is 74.41
+Precision@0.5=85.95%
+Precision@0.6=82.97%
+Precision@0.7=78.53%
+Precision@0.8=69.44%
+Precision@0.9=40.14%
+E=18:
+Mean IoU is 76.64
+Overall IoU is 74.68
+Precision@0.5=86.04%
+Precision@0.6=83.14%
+Precision@0.7=78.68%
+Precision@0.8=69.50%
+Precision@0.9=40.71%
+E=20:
+Mean IoU is 76.77
+Overall IoU is 74.71
+Precision@0.5=86.20%
+Precision@0.6=83.18%
+Precision@0.7=78.92%
+Precision@0.8=70.36%
+Precision@0.9=40.54%
+E=22:
+Mean IoU is 76.97
+Overall IoU is 74.88
+Precision@0.5=86.52%
+Precision@0.6=83.58%
+Precision@0.7=79.47%
+Precision@0.8=70.36%
+Precision@0.9=40.99%
+E=26:
+Mean IoU is 77.39
+Overall IoU is 75.11
+Precision@0.5=86.77%
+Precision@0.6=84.12%
+Precision@0.7=80.28%
+Precision@0.8=71.37%
+Precision@0.9=41.54%
+E=28:
+Mean IoU is 77.47
+Overall IoU is 75.51
+Precision@0.5=86.71%
+Precision@0.6=83.91%
+Precision@0.7=80.32%
+Precision@0.8=71.70%
+Precision@0.9=42.12%
+E=30:
+Mean IoU is 78.00
+Overall IoU is 76.37
+Precision@0.5=87.49%
+Precision@0.6=84.96%
+Precision@0.7=81.16%
+Precision@0.8=72.29%
+Precision@0.9=42.62%
+E=32:
+Mean IoU is 77.61
+Overall IoU is 75.82
+Precision@0.5=87.05%
+Precision@0.6=84.47%
+Precision@0.7=80.71%
+Precision@0.8=72.09%
+Precision@0.9=42.79%
 ```
 
 SAM2-B, 结合了CNN token来微调SAM2，Epoch=22：

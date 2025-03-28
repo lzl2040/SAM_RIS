@@ -36,7 +36,7 @@ def get_parser():
     parser.add_argument("-mask_decoder_lr", type=float, default=3e-5, metavar="LR",
                         help="learning rate (absolute lr), 6e-5")
     parser.add_argument("-grad_accumulation_steps", type=int, default=1)
-    parser.add_argument("-resume", type=str, default=None, help="Resuming training from checkpoint")
+    parser.add_argument("-resume", type=str, default="/home/v-zuoleili/Project/SAM_RIS/work_dir/SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-All-20250320-0402/ris_sam_model_e_37.pth", help="Resuming training from checkpoint")
     parser.add_argument("-pretrain", type=str, default=None, help="Resuming training from checkpoint")
 
     parser.add_argument("-device", type=str, default="0")
