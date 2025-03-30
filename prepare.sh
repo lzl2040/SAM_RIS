@@ -25,7 +25,11 @@ wget https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/In
 # cd /home/v-zuoleili
 # wget https://repo.anaconda.com/archive/Anaconda3-2024.10-1-Linux-x86_64.sh
 # bash Anaconda3-2024.10-1-Linux-x86_64.sh
+# source .bashrc
 # conda create -n ris python=3.10
 # conda activate ris
-# pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2
+# conda install pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1 -c pytorch -c nvidia
 # pip install -r requirements.txt
+# pip install numpy==1.26.3
+# git config --global user.name "lzl2040"
+# git config --global user.email "2040171586@qq.com"
