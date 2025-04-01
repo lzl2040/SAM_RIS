@@ -58,6 +58,21 @@ def get_dataset(image_set, transform, cnn_transform, args):
                       )
             dataset_list.append(dataset)
         ds = ConcatDataset(dataset_list)
+    elif args.dataset == "refcocog":
+        data_list = ["refcocog", "refcocog"]
+        split_by = ["umd", "google"]
+        dataset_list = []
+        for i in range(len(data_list)):
+            args.dataset = data_list[i]
+            args.splitBy = split_by[i]
+            dataset = ReferDataset(args,
+                        split=image_set,
+                        image_transforms=transform,
+                        target_transforms=None,
+                        cnn_transform=cnn_transform
+                      )
+            dataset_list.append(dataset)
+        ds = ConcatDataset(dataset_list)
     else:
         ds = ReferDataset(args,
                         split=image_set,
