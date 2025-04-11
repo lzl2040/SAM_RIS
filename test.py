@@ -29,6 +29,15 @@ from utils.visual import draw_contours
 #
 #     return T.Compose(image_transforms), T.Compose(target_transforms)
 
+def overlay_mask_on_image(raw_img, mask, color=(255, 0, 0), alpha=0.5):
+    """将单个mask叠加到图像上"""
+    H, W = mask.shape
+    color_mask = np.zeros((H, W, 3), dtype=np.uint8)
+    color_mask[mask > 0] = color
+    # print(raw_img.shape, color_mask.shape)
+    blended = cv2.addWeighted(raw_img, 1.0, color_mask, alpha, 0)
+    return blended
+
 def get_transform(args):
     transforms = [T.Resize(args.image_size, args.image_size),
                       T.ToTensor(),
@@ -111,23 +120,32 @@ def test_model(model, data_loader, device, logger, save_path):
                 # 高置信区域
                 sam2_pred = pred_masks[0]
                 image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
+                # image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
 
-                image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
+                # # 将绘制了轮廓的图像转换回RGB格式
+                # image_with_contours_rgb = image_with_contours[:, :, ::-1]
+                # # print(image_with_contours_rgb.shape)
 
-                # 将绘制了轮廓的图像转换回RGB格式
-                image_with_contours_rgb = image_with_contours[:, :, ::-1]
-                # print(image_with_contours_rgb.shape)
-
-                # 创建 PIL 图像对象
-                img_with_contours = Image.fromarray(image_with_contours_rgb)
+                # # 创建 PIL 图像对象
+                # img_with_contours = Image.fromarray(image_with_contours_rgb)
 
                 # 保存图像
-                img_save_path = os.path.join(save_path, f"{seg_total:05d}")
+                folder_name = obj_cap.replace(" ", "_")
+                img_save_path = os.path.join(save_path, f"{folder_name}_{seg_total}")
                 os.makedirs(img_save_path, exist_ok=True)
-                img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
+
+                gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
+                gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
+                gt_pil.save(f"{img_save_path}/gt.png")
+                pred_img = overlay_mask_on_image(image_bgr.copy(), sam2_pred[0], color=(255, 0, 0))  # red for prediction
+                pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
+                pred_pil.save(f"{img_save_path}/pred.png")
+
+                # img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
                 # cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
+                cur_iou = I / U if U != 0 else 0
                 with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
-                    f.write(obj_cap + "\n")
+                    f.write(f"{obj_cap}, IoU:{cur_iou}\n")
                 # ---------------- visualize ----------------------#
 
                 cum_I += I
