@@ -97,28 +97,28 @@ def test_model(model, data_loader, device, logger, save_path):
                 # max_iou_pred = max_iou_pred.item()
                 # ---------------- from referSAM ----------------------#
 
-                pred_logits = F.interpolate(
-                    low_pred_logits,
-                    size=(org_H, org_W),
-                    mode="bilinear",
-                    align_corners=False,
-                )
-                pred_masks = torch.sigmoid(pred_logits)
-                pred_masks = pred_masks.detach().cpu().numpy()
-                pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
-                target_ = org_mask.cpu().data.numpy()
-                # print(pred_masks.shape, target_.shape) # B C=1 H E
-                I, U = IoU(pred_masks, target_)
-                this_iou = 0.0 if U == 0 else I * 1.0 / U
-                miou_avg.update(this_iou)
+                # pred_logits = F.interpolate(
+                #     low_pred_logits,
+                #     size=(org_H, org_W),
+                #     mode="bilinear",
+                #     align_corners=False,
+                # )
+                # pred_masks = torch.sigmoid(pred_logits)
+                # pred_masks = pred_masks.detach().cpu().numpy()
+                # pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
+                # target_ = org_mask.cpu().data.numpy()
+                # # print(pred_masks.shape, target_.shape) # B C=1 H E
+                # I, U = IoU(pred_masks, target_)
+                # this_iou = 0.0 if U == 0 else I * 1.0 / U
+                # miou_avg.update(this_iou)
                 # mean_IoU.append(this_iou)
 
                 # ---------------- visualize ----------------------#
 
                 raw_img = org_img.detach().cpu().numpy()[0]
-                masks = np.array(target_[0] > 0).astype(np.uint8)
-                # 高置信区域
-                sam2_pred = pred_masks[0]
+                # masks = np.array(target_[0] > 0).astype(np.uint8)
+                # # 高置信区域
+                # sam2_pred = pred_masks[0]
                 image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
                 # image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
 
@@ -133,6 +133,9 @@ def test_model(model, data_loader, device, logger, save_path):
                 folder_name = obj_cap.replace(" ", "_")
                 img_save_path = os.path.join(save_path, f"{folder_name}_{seg_total}")
                 os.makedirs(img_save_path, exist_ok=True)
+                raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+                raw_img_pil.save(f"{img_save_path}/image.png")
+                # logger.info(f"Num: {seg_total}")
 
                 gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
                 gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
@@ -141,8 +144,8 @@ def test_model(model, data_loader, device, logger, save_path):
                 pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
                 pred_pil.save(f"{img_save_path}/pred.png")
 
-                # img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
-                # cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
+                img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
+                cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
                 cur_iou = I / U if U != 0 else 0
                 with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
                     f.write(f"{obj_cap}, IoU:{cur_iou}\n")
