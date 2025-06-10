@@ -13,9 +13,9 @@ from omegaconf import OmegaConf
 from lavis.common.registry import registry
 
 # from lavis.datasets.builders import *
-from lavis.models import *
-from lavis.processors import *
-from lavis.tasks import *
+# from lavis.models import *
+# from lavis.processors import *
+# from lavis.tasks import *
 
 
 root_dir = os.path.dirname(os.path.abspath(__file__))
