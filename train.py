@@ -252,7 +252,7 @@ def main():
             checkpoint = {
                 "model": save_dict,
                 "optimizer": optimizer.state_dict(),
-                "sche" : scheduler.state_dict(),
+                # "sche" : scheduler.state_dict(),
                 "lr_sche" : lr_scheduler.state_dict(),
                 "epoch": epoch + 1,
             }
