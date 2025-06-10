@@ -10,7 +10,7 @@ import torch
 from omegaconf import OmegaConf
 from lavis.common.registry import registry
 
-# from lavis.models.base_model import BaseModel
+from lavis.models.base_model import BaseModel
 
 # from lavis.models.albef_models.albef_classification import AlbefClassification
 # from lavis.models.albef_models.albef_feature_extractor import AlbefFeatureExtractor
