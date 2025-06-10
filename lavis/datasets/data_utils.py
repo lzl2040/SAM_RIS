@@ -11,7 +11,7 @@ import os
 import random as rnd
 import tarfile
 import zipfile
-import cv2
+# import cv2
 
 import decord
 import webdataset as wds
