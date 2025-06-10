@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 from sam2.build_sam import build_sam2
-from lavis import Blip2Qformer
+from lavis.models.blip2_models.blip2_qformer import Blip2Qformer
 import os
 import numpy as np
 import matplotlib.pyplot as plt
