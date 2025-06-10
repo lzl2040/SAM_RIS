@@ -190,7 +190,7 @@ def main():
             start_epoch = checkpoint["epoch"] + 1
             sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
             optimizer.load_state_dict(checkpoint["optimizer"])
-            scheduler.load_state_dict(checkpoint["sche"])
+            # scheduler.load_state_dict(checkpoint["sche"])
             lr_scheduler.load_state_dict(checkpoint["lr_sche"])
         model_save_path = Path(args.resume).parent
         # sam_rvos_model.set_model_save_path(model_save_path)
@@ -263,7 +263,7 @@ def main():
                 checkpoint = {
                     "model": save_dict,
                     "optimizer": optimizer.state_dict(),
-                    "sche": scheduler.state_dict(),
+                    # "sche": scheduler.state_dict(),
                     "lr_sche": lr_scheduler.state_dict(),
                     "epoch": epoch + 1,
                 }

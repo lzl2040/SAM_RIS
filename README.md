@@ -6,7 +6,8 @@ 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
 ## Run
 batch size=16,
 - img_size=1024: 60G
-- img_size=256: 8G
+- img_size=384: bs=16, 12G; bs=64, 32G; bs=128, 62G
+- img_size=480: bs=96, 74G
 
 ### Train
 ```shell

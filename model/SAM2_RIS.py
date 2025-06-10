@@ -27,7 +27,8 @@ def load_blip2_qformer(path):
     # print(get_w(bert_weight, "Qformer"))
     qformer.Qformer.load_state_dict(get_w(bert_weight, "Qformer"), strict=False)
     qformer.ln_vision.load_state_dict(get_w(model_weights, "ln_vision"))
-    qformer.query_tokens.data = model_weights['query_tokens']
+    qformer.query_tokens.data.copy_(model_weights['query_tokens'])
+    del qformer.Qformer.cls.predictions.decoder.bias
     print("load blip2 over")
     del weights
     return qformer
@@ -84,12 +85,13 @@ class CNNTokenGenration(nn.Module):
             ]
         )
 
+
 class SAM2_RIS(nn.Module):
     def __init__(self, model, args, target_size=1024, device="cuda:0"):
         super().__init__()
         self.device = device
         self.sam2_model = model
-        self.blip2_qformer = load_blip2_qformer(args.blip2_path).to(self.device)
+        self.blip2_qformer = load_blip2_qformer(args.blip2_path)
         # multi model queries
         self.query_resizer = FeatureResizer(
             input_feat_size=768,
