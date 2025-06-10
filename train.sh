@@ -11,7 +11,7 @@ torchrun --nproc_per_node=1 \
     --save_visual_interval 100 \
     --lr 3e-4 \
     --work_dir /mnt/lizuolei/Other/MD_SAM/work_dir \
-    --log_dir /mnt/lizuolei/Other/MD_SAM/log_path \
+    --log_path /mnt/lizuolei/Other/MD_SAM/log_path \
     --blip2_path /mnt/lizuolei/Other/MD_SAM/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
     --task_name 0610_MD_SAM_img_size_480 \
     # --distributed
