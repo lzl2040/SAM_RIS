@@ -22,6 +22,10 @@ from config import config2model_path
 from utils.logger_utils import get_logger
 
 
+# 计算为 GB（float32 -> 每个参数4字节）
+def param_count_to_gb(param_count):
+    return param_count * 4 / (1024 ** 3)
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -85,7 +89,7 @@ def get_dataset(image_set, transform, cnn_transform, args):
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    args.pretrain_model_path = config2model_path[args.model_cfg]
+    sam2_checkpoint = config2model_path[args.model_cfg]
     os.makedirs(args.log_path, exist_ok=True)
     args.log_path = os.path.join(args.log_path, f"{args.task_name}.txt")
 
@@ -113,7 +117,6 @@ def main():
     set_seed(14159265)
 
     model_cfg = args.model_cfg
-    sam2_checkpoint = args.pretrain_model_path
     sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=device, apply_postprocessing=True)
 
     sam_ris_model = SAM2_RIS(model=sam2_model, args=args, device=device).to(device)
@@ -125,15 +128,29 @@ def main():
     sam_ris_model.train()
 
     if local_rank == 0:
-        print("Number of total parameters: ", sum(p.numel() for p in sam_ris_model.parameters()),)
-        print("Number of trainable parameters: ", sum(p.numel() for p in sam_ris_model.parameters() if p.requires_grad))
+        total_params = sum(p.numel() for p in sam_ris_model.parameters())
+        trainable_params = sum(p.numel() for p in sam_ris_model.parameters() if p.requires_grad)
+        blip2_qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.parameters())
+        qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.Qformer.parameters())
+        image_encoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.image_encoder.parameters())
+        mask_decoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.sam_mask_decoder.parameters())
+        fusion_params_list = [
+            (name, param) for name, param in sam_ris_model.sam2_model.image_encoder.named_parameters()
+            if "fusion" in name
+        ]
+        fusion_params = sum(p.numel() for _, p in fusion_params_list)
+        logger.info(f"Number of total parameters: {param_count_to_gb(total_params)} GB")
+        logger.info(f"Number of trainable parameters: {param_count_to_gb(trainable_params)} GB")
+        logger.info(f"Number of blip2qformer parameters: {param_count_to_gb(blip2_qformer_params)} GB")
+        logger.info(f"Number of qformer parameters: {param_count_to_gb(qformer_params)} GB")
+        logger.info(f"Number of sam image encoder parameters: {param_count_to_gb(image_encoder_params)} GB")
+        logger.info(f"Number of sam mask encoder parameters: {param_count_to_gb(mask_decoder_params)} GB")
+        logger.info(f"Number of fusion parameters: {param_count_to_gb(fusion_params)} GB")
 
-        img_mask_encdec_params = list(sam_ris_model.sam2_model.sam_mask_decoder.parameters())
-        print("Number of mask decoder parameters: ", sum(p.numel() for p in img_mask_encdec_params if p.requires_grad))
 
     trainable_params = [p for p in sam_ris_model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
     seg_loss = monai.losses.DiceLoss(sigmoid=True, squared_pred=True, reduction="mean")
     # cross entropy loss
     ce_loss = nn.BCEWithLogitsLoss(reduction="mean")

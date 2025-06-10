@@ -1,6 +1,6 @@
-# PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
+PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
 
-PRETRAIN_WEIGHT_ROOT = "/data/lizuolei/Project/SAM_RVOS/checkpoints"
+# PRETRAIN_WEIGHT_ROOT = "/data/lizuolei/Project/SAM_RVOS/checkpoints"
 config2model_path = {
     "sam2_hiera_b+.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_base_plus.pt",
     "sam2_hiera_s.yaml" : "/data/lizuolei/Project/SAM_RVOS/checkpoints/sam2_hiera_small.pt",

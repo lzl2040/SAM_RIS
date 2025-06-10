@@ -4,13 +4,33 @@ download huggingface token:
 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
 ```
 ## Run
+batch size=16,
+- img_size=1024: 60G
+- img_size=256: 8G
+
 ### Train
 ```shell
 export HF_HOME="/your/custom/cache/directory"
 export TORCH_HOME="/your/custom/cache/directory"
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py -model_cfg sam2.1_hiera_s.yaml -num_epochs 40 -batch_size 16 -image_size 1024 -train_visual --dataset all -distributed
+CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py --model_cfg sam2.1_hiera_s.yaml --num_epochs 40 --batch_size 16 --image_size 360 --train_visual --dataset all --task_name MD_SAM_img_size_360 --distributed
 ```
 ### Test
 ```shell
 python test.py -model_cfg sam2.1_hiera_s.yaml -device 0 --split val --dataset refcoco+
 ```
+
+## Error
+return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
+NotImplementedError: Cannot copy out of meta tensor; no data!
+使用如下代码检查是否有meta：
+```
+print(f"\n🔍 Checking meta tensors in blip2..")
+has_meta = False
+for name, param in self.blip2_qformer.named_parameters():
+    if param.device.type == 'meta':
+        print(f"[META PARAM] {name}, shape: {param.shape}")
+        has_meta = True
+if not has_meta:
+    print("✅ No meta tensors found.")
+```
+然后删掉它
