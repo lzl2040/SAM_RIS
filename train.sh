@@ -1,6 +1,6 @@
 torchrun --nproc_per_node=1 \
     train.py \
-    --model_cfg sam2.1_hiera_s.yaml \
+    --model_cfg sam2.1_hiera_b+.yaml \
     --num_epochs 40 \
     --batch_size 96 \
     --image_size 480 \
@@ -13,5 +13,5 @@ torchrun --nproc_per_node=1 \
     --work_dir /mnt/lizuolei/Other/MD_SAM/work_dir \
     --log_path /mnt/lizuolei/Other/MD_SAM/log_path \
     --blip2_path /mnt/lizuolei/Other/MD_SAM/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
-    --task_name 0610_MD_SAM_img_size_480 \
+    --task_name 0612_MD_SAM_img_size_480_b+ \
     # --distributed
