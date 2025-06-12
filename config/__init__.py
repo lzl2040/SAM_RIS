@@ -1,5 +1,5 @@
-PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
-# PRETRAIN_WEIGHT_ROOT = "/mnt/lizuolei/Other/MD_SAM/Pretrain"
+# PRETRAIN_WEIGHT_ROOT = "/home/v-zuoleili/Pretrain"
+PRETRAIN_WEIGHT_ROOT = "/mnt/lizuolei/Other/MD_SAM/Pretrain"
 # PRETRAIN_WEIGHT_ROOT = "/data/lizuolei/Project/SAM_RVOS/checkpoints"
 config2model_path = {
     "sam2_hiera_b+.yaml" : f"{PRETRAIN_WEIGHT_ROOT}/sam2_hiera_base_plus.pt",
