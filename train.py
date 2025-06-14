@@ -16,6 +16,7 @@ from tqdm import tqdm
 import os
 import logging
 from model.SAM2_RIS import SAM2_RIS
+# from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
 from sam2.build_sam import build_sam2
 import data.transforms as T
 from config import config2model_path
@@ -48,8 +49,11 @@ def get_transform(args):
 def get_dataset(image_set, transform, cnn_transform, args):
     from data.dataset_refer_bert import ReferDataset
     if args.dataset == "all":
-        data_list = ["refcoco", "refcoco+", "refcocog", "refcocog"]
-        split_by = ["unc", "unc", "umd", "google"]
+        # use refcocog umd, we suppose refcocog google contains the val images from refcocog umd
+        # data_list = ["refcoco", "refcoco+", "refcocog", "refcocog"]
+        # split_by = ["unc", "unc", "umd", "google"]
+        data_list = ["refcoco", "refcoco+", "refcocog"]
+        split_by = ["unc", "unc", "umd"]
         dataset_list = []
         for i in range(len(data_list)):
             args.dataset = data_list[i]
@@ -62,21 +66,22 @@ def get_dataset(image_set, transform, cnn_transform, args):
                       )
             dataset_list.append(dataset)
         ds = ConcatDataset(dataset_list)
-    elif args.dataset == "refcocog":
-        data_list = ["refcocog", "refcocog"]
-        split_by = ["umd", "google"]
-        dataset_list = []
-        for i in range(len(data_list)):
-            args.dataset = data_list[i]
-            args.splitBy = split_by[i]
-            dataset = ReferDataset(args,
-                        split=image_set,
-                        image_transforms=transform,
-                        target_transforms=None,
-                        cnn_transform=cnn_transform
-                      )
-            dataset_list.append(dataset)
-        ds = ConcatDataset(dataset_list)
+    # elif args.dataset == "refcocog":
+    #     # only use one
+    #     data_list = ["refcocog", "refcocog"]
+    #     split_by = ["umd", "google"]
+    #     dataset_list = []
+    #     for i in range(len(data_list)):
+    #         args.dataset = data_list[i]
+    #         args.splitBy = split_by[i]
+    #         dataset = ReferDataset(args,
+    #                     split=image_set,
+    #                     image_transforms=transform,
+    #                     target_transforms=None,
+    #                     cnn_transform=cnn_transform
+    #                   )
+    #         dataset_list.append(dataset)
+    #     ds = ConcatDataset(dataset_list)
     else:
         ds = ReferDataset(args,
                         split=image_set,
