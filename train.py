@@ -225,7 +225,7 @@ def main():
             # blip2_imgs = rearrange(blip2_imgs, "b c h w -> b h w c")
             with torch.cuda.amp.autocast():
                 pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
-                loss = seg_loss(pred_logits, masks) + ce_loss(pred_logits, masks.float())
+                loss = seg_loss(pred_logits, masks.float()) + ce_loss(pred_logits, masks.float())
 
                 loss_avg.update(loss.item(), imgs.shape[0])
                 if step % args.print_interval == 0 and local_rank == 0:
