@@ -2,7 +2,7 @@ torchrun --nproc_per_node=1 \
     train.py \
     --model_cfg sam2.1_hiera_l.yaml \
     --num_epochs 40 \
-    --batch_size 64 \
+    --batch_size 36 \
     --image_size 480 \
     --train_visual \
     --dataset all \
