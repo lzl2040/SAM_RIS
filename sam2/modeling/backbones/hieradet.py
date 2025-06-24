@@ -452,9 +452,9 @@ class Hiera(nn.Module):
         sam2_dims.append(dim_out)
         print(sam2_dims)
 
-        self.cnn2sam_fusion = nn.ModuleList([
-            LocalTokenAdapter(sam_dim=sam2_dim, dim=64, num_heads=4) for sam2_dim in sam2_dims
-        ])
+        # self.cnn2sam_fusion = nn.ModuleList([
+        #     LocalTokenAdapter(sam_dim=sam2_dim, dim=64, num_heads=4) for sam2_dim in sam2_dims
+        # ])
 
         self.channel_list = (
             [self.blocks[i].dim_out for i in self.stage_ends[::-1]]
@@ -490,11 +490,12 @@ class Hiera(nn.Module):
                 # reshape feats to B N C
                 B, H, W, C = x.shape
                 # print(x.shape)
-                feats = rearrange(x, "b h w c -> b (h w) c")
-                feats = self.cnn2sam_fusion[stage](feats, cnn_tokens)
-                feats = rearrange(feats, "b (h w) c -> b h w c", h = H, w=W)
+                # local adapter
+                # feats = rearrange(x, "b h w c -> b (h w) c")
+                # feats = self.cnn2sam_fusion[stage](feats, cnn_tokens)
+                # feats = rearrange(feats, "b (h w) c -> b h w c", h = H, w=W)
                 # b c h w
-                feats = feats.permute(0, 3, 1, 2)
+                feats = x.permute(0, 3, 1, 2)
                 
                 # print(feats.shape)
                 # if stage > 1:

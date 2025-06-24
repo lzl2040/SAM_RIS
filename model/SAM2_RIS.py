@@ -98,13 +98,13 @@ class SAM2_RIS(nn.Module):
             output_feat_size=256,
             dropout=0,
         )
-        self.cnn_extractor = timm.create_model(
-            "resnet50",
-            pretrained=True,
-            features_only=True,
-            out_indices=[1, 2, 3, 4],
-        )
-        self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
+        # self.cnn_extractor = timm.create_model(
+        #     "resnet50",
+        #     pretrained=True,
+        #     features_only=True,
+        #     out_indices=[1, 2, 3, 4],
+        # )
+        # self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
         self.target_size = args.image_size
         # 特征大小
         feat_sizes = [256 // 2 ** i * self.target_size // 1024 for i in range(3)]
@@ -118,8 +118,8 @@ class SAM2_RIS(nn.Module):
         self.args = args
 
         # freeze cnn encoder
-        for param in self.cnn_extractor.parameters():
-            param.requires_grad = False
+        # for param in self.cnn_extractor.parameters():
+        #     param.requires_grad = False
 
         # freeze prompt encoder
         for param in self.sam2_model.sam_prompt_encoder.parameters():
@@ -172,8 +172,9 @@ class SAM2_RIS(nn.Module):
         """
         image: (B, 3, 1024, 1024)
         """
-        feature_list = self.cnn_extractor(cnn_image)
-        cnn_tokens = self.generate_cnn_tokens(feature_list)
+        # feature_list = self.cnn_extractor(cnn_image)
+        # cnn_tokens = self.generate_cnn_tokens(feature_list)
+        cnn_tokens = None
         # print(cnn_tokens.shape) # 4 N=196 C=64
         raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score = self.generate_queries(blip2_imgs=blip2_imgs,
                                                                           repeat_catpipns=captions)
@@ -205,53 +206,53 @@ class SAM2_RIS(nn.Module):
         masks_logits = F.interpolate(low_res_masks_logits, (self.target_size, self.target_size),
                                              mode="bilinear", align_corners=False)
 
-        if self.args.train_visual and step % self.args.save_visual_interval == 0:
-            visual_save_path = os.path.join(self.save_path, "visual")
-            os.makedirs(visual_save_path, exist_ok=True)
-            save_pred_mask = torch.zeros_like(masks_logits)
-            print(torch.max(masks_logits[0]), torch.min(masks_logits[0]))
-            save_pred_mask[masks_logits > 0.5] = 1
-            save_pred_mask = save_pred_mask[1].detach().cpu().numpy()
-            gt_mask = masks[1].detach().cpu().numpy()
-            select_img = raw_imgs[1].detach().cpu().numpy()
-            # print(select_img.shape)
-            # 将图像转换为BGR格式，因为OpenCV使用BGR
-            image_bgr = select_img[:, :, ::-1].astype(np.uint8)
-            # print(np.max(select_img, axis=0))
+        # if self.args.train_visual and step % self.args.save_visual_interval == 0:
+        #     visual_save_path = os.path.join(self.save_path, "visual")
+        #     os.makedirs(visual_save_path, exist_ok=True)
+        #     save_pred_mask = torch.zeros_like(masks_logits)
+        #     print(torch.max(masks_logits[0]), torch.min(masks_logits[0]))
+        #     save_pred_mask[masks_logits > 0.5] = 1
+        #     save_pred_mask = save_pred_mask[1].detach().cpu().numpy()
+        #     gt_mask = masks[1].detach().cpu().numpy()
+        #     select_img = raw_imgs[1].detach().cpu().numpy()
+        #     # print(select_img.shape)
+        #     # 将图像转换为BGR格式，因为OpenCV使用BGR
+        #     image_bgr = select_img[:, :, ::-1].astype(np.uint8)
+        #     # print(np.max(select_img, axis=0))
 
-            # 绘制轮廓
-            image_with_contours = draw_contours(image_bgr, save_pred_mask[0], gt_mask[0])
+        #     # 绘制轮廓
+        #     image_with_contours = draw_contours(image_bgr, save_pred_mask[0], gt_mask[0])
 
-            # 将绘制了轮廓的图像转换回RGB格式
-            image_with_contours_rgb = image_with_contours[:, :, ::-1]
-            # print(image_with_contours_rgb.shape)
+        #     # 将绘制了轮廓的图像转换回RGB格式
+        #     image_with_contours_rgb = image_with_contours[:, :, ::-1]
+        #     # print(image_with_contours_rgb.shape)
 
-            # 创建 PIL 图像对象
-            img_with_contours = Image.fromarray(image_with_contours_rgb)
+        #     # 创建 PIL 图像对象
+        #     img_with_contours = Image.fromarray(image_with_contours_rgb)
 
-            # 保存图像
-            save_path = os.path.join(visual_save_path, f"{epoch}-{step}")
-            os.makedirs(save_path, exist_ok=True)
-            img_with_contours.save(os.path.join(save_path, f"visual.jpg"))
-            with open(os.path.join(save_path, "caption.txt"), "w") as f:
-                for exp in captions:
-                    f.write(exp + "\n")
-                # f.write(str(pred_mask_score))
+        #     # 保存图像
+        #     save_path = os.path.join(visual_save_path, f"{epoch}-{step}")
+        #     os.makedirs(save_path, exist_ok=True)
+        #     img_with_contours.save(os.path.join(save_path, f"visual.jpg"))
+        #     with open(os.path.join(save_path, "caption.txt"), "w") as f:
+        #         for exp in captions:
+        #             f.write(exp + "\n")
+        #         # f.write(str(pred_mask_score))
 
-            # 保存特征图
-            # to_pil_image = transforms.ToPILImage()
-            sample = high_res_features[0][1].to(torch.float32).detach().cpu().numpy()
-            channel_num = [i for i in range(sample.shape[0])]
-            random.shuffle(channel_num)
+        #     # 保存特征图
+        #     # to_pil_image = transforms.ToPILImage()
+        #     sample = high_res_features[0][1].to(torch.float32).detach().cpu().numpy()
+        #     channel_num = [i for i in range(sample.shape[0])]
+        #     random.shuffle(channel_num)
 
-            channel_num = channel_num[:25]
+        #     channel_num = channel_num[:25]
 
-            plt.figure(figsize=(10, 10))
-            for index, channel in enumerate(channel_num):
-                ax = plt.subplot(5, 5, index + 1, )
-                plt.imshow(sample[channel, :, :])
-            plt.savefig(os.path.join(save_path, "feature.jpg"), dpi=300)
-            plt.close()
+        #     plt.figure(figsize=(10, 10))
+        #     for index, channel in enumerate(channel_num):
+        #         ax = plt.subplot(5, 5, index + 1, )
+        #         plt.imshow(sample[channel, :, :])
+        #     plt.savefig(os.path.join(save_path, "feature.jpg"), dpi=300)
+        #     plt.close()
 
         return masks_logits, low_res_masks_logits, multi_modal_embed, object_score_logits, iou_predictions
 
