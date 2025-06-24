@@ -73,6 +73,12 @@ class ReferDataset(data.Dataset):
         #     self.max_tokens = 20
 
         ref_ids = self.refer.getRefIds(split=self.split)
+        # refcocog val umd 2573
+        # refcocog test umd 5023
+        # refcocog val google 5000
+        # refcocog train umd 42226
+        # refcocog train google 44822
+        # print(self.split, len(ref_ids))
         img_ids = self.refer.getImgIds(ref_ids)
 
         all_imgs = self.refer.Imgs

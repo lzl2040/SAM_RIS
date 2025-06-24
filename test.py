@@ -10,6 +10,7 @@ from PIL import Image
 from torch.nn import functional as F
 import cv2
 from model.SAM2_RIS import SAM2_RIS
+# from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
 from sam2.build_sam import build_sam2
 from utils.logger_utils import get_logger
 from utils.metrics import computeIoU, IoU
@@ -97,29 +98,29 @@ def test_model(model, data_loader, device, logger, save_path):
                 # max_iou_pred = max_iou_pred.item()
                 # ---------------- from referSAM ----------------------#
 
-                # pred_logits = F.interpolate(
-                #     low_pred_logits,
-                #     size=(org_H, org_W),
-                #     mode="bilinear",
-                #     align_corners=False,
-                # )
-                # pred_masks = torch.sigmoid(pred_logits)
-                # pred_masks = pred_masks.detach().cpu().numpy()
-                # pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
-                # target_ = org_mask.cpu().data.numpy()
-                # # print(pred_masks.shape, target_.shape) # B C=1 H E
-                # I, U = IoU(pred_masks, target_)
-                # this_iou = 0.0 if U == 0 else I * 1.0 / U
-                # miou_avg.update(this_iou)
-                # mean_IoU.append(this_iou)
+                pred_logits = F.interpolate(
+                    low_pred_logits,
+                    size=(org_H, org_W),
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                pred_masks = torch.sigmoid(pred_logits)
+                pred_masks = pred_masks.detach().cpu().numpy()
+                pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
+                target_ = org_mask.cpu().data.numpy()
+                # print(pred_masks.shape, target_.shape) # B C=1 H E
+                I, U = IoU(pred_masks, target_)
+                this_iou = 0.0 if U == 0 else I * 1.0 / U
+                miou_avg.update(this_iou)
+                mean_IoU.append(this_iou)
 
                 # ---------------- visualize ----------------------#
 
-                raw_img = org_img.detach().cpu().numpy()[0]
+                # raw_img = org_img.detach().cpu().numpy()[0]
                 # masks = np.array(target_[0] > 0).astype(np.uint8)
                 # # 高置信区域
                 # sam2_pred = pred_masks[0]
-                image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
+                # image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
                 # image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
 
                 # # 将绘制了轮廓的图像转换回RGB格式
@@ -129,26 +130,26 @@ def test_model(model, data_loader, device, logger, save_path):
                 # # 创建 PIL 图像对象
                 # img_with_contours = Image.fromarray(image_with_contours_rgb)
 
-                # 保存图像
-                folder_name = obj_cap.replace(" ", "_")
-                img_save_path = os.path.join(save_path, f"{folder_name}_{seg_total}")
-                os.makedirs(img_save_path, exist_ok=True)
-                raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
-                raw_img_pil.save(f"{img_save_path}/image.png")
-                # logger.info(f"Num: {seg_total}")
+                # # 保存图像
+                # folder_name = obj_cap.replace(" ", "_")
+                # img_save_path = os.path.join(save_path, f"{folder_name}_{seg_total}")
+                # os.makedirs(img_save_path, exist_ok=True)
+                # raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+                # raw_img_pil.save(f"{img_save_path}/image.png")
+                # # logger.info(f"Num: {seg_total}")
 
-                gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
-                gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
-                gt_pil.save(f"{img_save_path}/gt.png")
-                pred_img = overlay_mask_on_image(image_bgr.copy(), sam2_pred[0], color=(255, 0, 0))  # red for prediction
-                pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
-                pred_pil.save(f"{img_save_path}/pred.png")
+                # gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
+                # gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
+                # gt_pil.save(f"{img_save_path}/gt.png")
+                # pred_img = overlay_mask_on_image(image_bgr.copy(), sam2_pred[0], color=(255, 0, 0))  # red for prediction
+                # pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
+                # pred_pil.save(f"{img_save_path}/pred.png")
 
-                img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
-                cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
-                cur_iou = I / U if U != 0 else 0
-                with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
-                    f.write(f"{obj_cap}, IoU:{cur_iou}\n")
+                # img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
+                # # cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
+                # cur_iou = I / U if U != 0 else 0
+                # with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
+                #     f.write(f"{obj_cap}, IoU:{cur_iou}\n")
                 # ---------------- visualize ----------------------#
 
                 cum_I += I
@@ -156,6 +157,7 @@ def test_model(model, data_loader, device, logger, save_path):
                 for n_eval_iou in range(len(eval_seg_iou_list)):
                     eval_seg_iou = eval_seg_iou_list[n_eval_iou]
                     seg_correct[n_eval_iou] += (this_iou >= eval_seg_iou)
+                
                 seg_total += 1
                 logger.info(f"Num: {seg_total} mIoU: {miou_avg.avg * 100:.4f}, oIoU: {(cum_I / cum_U) * 100:.4f}")
 

@@ -7,17 +7,17 @@ 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
 batch size=16,
 - img_size=1024: 60G
 - img_size=384: bs=16, 12G; bs=64, 32G; bs=128, 62G
-- img_size=480: bs=96, 74G
+- img_size=480: bs=32, 27G; bs=96, 74G
 
 ### Train
 ```shell
 export HF_HOME="/your/custom/cache/directory"
 export TORCH_HOME="/your/custom/cache/directory"
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py --model_cfg sam2.1_hiera_s.yaml --num_epochs 40 --batch_size 16 --image_size 360 --train_visual --dataset all --task_name MD_SAM_img_size_360 --distributed
+CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py --model_cfg sam2.1_hiera_b+.yaml --num_epochs 40 --batch_size 16 --image_size 480 --train_visual --dataset all --task_name MD_SAM_img_size_480_b+ --distributed
 ```
 ### Test
 ```shell
-python test.py -model_cfg sam2.1_hiera_s.yaml -device 0 --split val --dataset refcoco+
+python test.py --model_cfg sam2.1_hiera_b+.yaml --device 0 --split val --dataset refcocog --image_size 480 --splitBy umd
 ```
 
 ## Error
