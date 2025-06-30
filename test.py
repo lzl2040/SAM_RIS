@@ -178,6 +178,7 @@ def test_model(model, data_loader, device, logger, save_path):
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    os.makedirs(args.log_path, exist_ok=True)
     args.log_path = os.path.join(args.log_path, f"{args.task_name}_test_e_38.txt")
     args.pretrain_model_path = config2model_path[args.model_cfg]
 
