@@ -136,14 +136,14 @@ class VisionMultiModalQueryFusionModule(nn.Module):
         self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
 
         self.multi_modal_resizer = FeatureResizer(input_feat_size=input_feat_size, output_feat_size=d_model, dropout=dropout)
-        # self.res_gate = nn.Sequential(
-        #     nn.Linear(d_model, d_model, bias=False),
-        #     nn.ReLU(),
-        #     nn.Linear(d_model, d_model, bias=False),
-        #     # nn.Sigmoid()
-        #     # nn.Tanh()
-        #     nn.Tanh()
-        # )
+        self.res_gate = nn.Sequential(
+            nn.Linear(d_model, d_model, bias=False),
+            nn.ReLU(),
+            nn.Linear(d_model, d_model, bias=False),
+            # nn.Sigmoid()
+            # nn.Tanh()
+            nn.Tanh()
+        )
 
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
@@ -171,8 +171,8 @@ class VisionMultiModalQueryFusionModule(nn.Module):
                                    key=self.with_pos_embed(memory, pos),
                                    value=memory, attn_mask=None,
                                    key_padding_mask=memory_key_padding_mask)
-        # q2i_tgt = tgt + (self.res_gate(query2img_tgt) * query2img_tgt)
-        q2i_tgt = tgt + query2img_tgt
+        q2i_tgt = tgt + (self.res_gate(query2img_tgt) * query2img_tgt)
+        # q2i_tgt = tgt + query2img_tgt
         q2i_tgt = rearrange(q2i_tgt, "(t h w) b c -> (b t) c h w", t=T, h = H, w = W)
         i2q_tgt = None
         ###************************###
@@ -451,7 +451,7 @@ class Hiera(nn.Module):
         fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
         self.vision_multi_modal_fusions.append(fusion_module)
         sam2_dims.append(dim_out)
-        print(sam2_dims)
+        # print(sam2_dims)
 
         # self.cnn2sam_fusion = nn.ModuleList([
         #     LocalTokenAdapter(sam_dim=sam2_dim, dim=64, num_heads=4) for sam2_dim in sam2_dims
