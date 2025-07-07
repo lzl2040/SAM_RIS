@@ -15,8 +15,8 @@ from pathlib import Path
 from tqdm import tqdm
 import os
 import logging
-from model.SAM2_RIS import SAM2_RIS
-# from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
+# from model.SAM2_RIS import SAM2_RIS
+from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
 from sam2.build_sam import build_sam2
 import data.transforms as T
 from config import config2model_path
@@ -135,8 +135,8 @@ def main():
     if local_rank == 0:
         total_params = sum(p.numel() for p in sam_ris_model.parameters())
         trainable_params = sum(p.numel() for p in sam_ris_model.parameters() if p.requires_grad)
-        blip2_qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.parameters())
-        qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.Qformer.parameters())
+        # blip2_qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.parameters())
+        # qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.Qformer.parameters())
         image_encoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.image_encoder.parameters())
         mask_decoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.sam_mask_decoder.parameters())
         fusion_params_list = [
@@ -146,8 +146,8 @@ def main():
         fusion_params = sum(p.numel() for _, p in fusion_params_list)
         logger.info(f"Number of total parameters: {param_count_to_gb(total_params)} GB")
         logger.info(f"Number of trainable parameters: {param_count_to_gb(trainable_params)} GB")
-        logger.info(f"Number of blip2qformer parameters: {param_count_to_gb(blip2_qformer_params)} GB")
-        logger.info(f"Number of qformer parameters: {param_count_to_gb(qformer_params)} GB")
+        # logger.info(f"Number of blip2qformer parameters: {param_count_to_gb(blip2_qformer_params)} GB")
+        # logger.info(f"Number of qformer parameters: {param_count_to_gb(qformer_params)} GB")
         logger.info(f"Number of sam image encoder parameters: {param_count_to_gb(image_encoder_params)} GB")
         logger.info(f"Number of sam mask encoder parameters: {param_count_to_gb(mask_decoder_params)} GB")
         logger.info(f"Number of fusion parameters: {param_count_to_gb(fusion_params)} GB")

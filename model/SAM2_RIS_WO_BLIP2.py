@@ -101,13 +101,13 @@ class SAM2_RIS_WO_BLIP2(nn.Module):
             output_feat_size=256,
             dropout=0,
         )
-        self.cnn_extractor = timm.create_model(
-            "resnet50",
-            pretrained=True,
-            features_only=True,
-            out_indices=[1, 2, 3, 4],
-        )
-        self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
+        # self.cnn_extractor = timm.create_model(
+        #     "resnet50",
+        #     pretrained=True,
+        #     features_only=True,
+        #     out_indices=[1, 2, 3, 4],
+        # )
+        # self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
         self.target_size = args.image_size
         # 特征大小
         feat_sizes = [256 // 2 ** i * self.target_size // 1024 for i in range(3)]
@@ -121,8 +121,8 @@ class SAM2_RIS_WO_BLIP2(nn.Module):
         self.args = args
 
         # freeze cnn encoder
-        for param in self.cnn_extractor.parameters():
-            param.requires_grad = False
+        # for param in self.cnn_extractor.parameters():
+        #     param.requires_grad = False
 
         # freeze prompt encoder
         for param in self.sam2_model.sam_prompt_encoder.parameters():
@@ -193,8 +193,9 @@ class SAM2_RIS_WO_BLIP2(nn.Module):
         """
         image: (B, 3, 1024, 1024)
         """
-        feature_list = self.cnn_extractor(cnn_image)
-        cnn_tokens = self.generate_cnn_tokens(feature_list)
+        # feature_list = self.cnn_extractor(cnn_image)
+        # cnn_tokens = self.generate_cnn_tokens(feature_list)
+        cnn_tokens = None
         # print(cnn_tokens.shape) # 4 N=196 C=64
         text_features, text_embeds = self.generate_text_features(captions)
         # print(text_features.shape, text_embeds.shape) # torch.Size([32, 21, 768]) torch.Size([32, 256])
