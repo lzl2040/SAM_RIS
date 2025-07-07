@@ -17,3 +17,4 @@ webdataset
 fairscale
 scikit-image
 matplotlib
+open_clip_torch
