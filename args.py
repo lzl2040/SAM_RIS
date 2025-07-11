@@ -63,6 +63,7 @@ def get_parser():
     parser.add_argument('--split', default='train', help='only used when testing')
     parser.add_argument('--splitBy', default='unc', help='change to umd or google when the dataset is G-Ref (RefCOCOg)')
 
+    parser.add_argument("--query_num", type=int, default=32, help="the number of query num from blip2")
     return parser
 
 

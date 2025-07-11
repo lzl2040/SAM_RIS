@@ -29,7 +29,7 @@ wget https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/In
 # source .bashrc
 # conda create -n ris python=3.10
 # conda activate ris
-# conda install pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1 -c pytorch -c nvidia
+# pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 # pip install -r requirements.txt
 # pip install numpy==1.26.3
 # git config --global user.name "lzl2040"
