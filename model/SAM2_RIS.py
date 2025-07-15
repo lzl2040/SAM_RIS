@@ -104,11 +104,11 @@ class SAM2_RIS(nn.Module):
         #     nn.Linear(32, args.query_num)
         # ]
         # self.query_num_resizer = nn.ModuleList([nn.Sequential(*query_fc)])
-        self.query_num_resizer = FeatureResizer(
-            input_feat_size=32,
-            output_feat_size=args.query_num,
-            dropout=0,
-        )
+        # self.query_num_resizer = FeatureResizer(
+        #     input_feat_size=32,
+        #     output_feat_size=args.query_num,
+        #     dropout=0,
+        # )
         # self.cnn_extractor = timm.create_model(
         #     "resnet50",
         #     pretrained=True,
@@ -162,7 +162,8 @@ class SAM2_RIS(nn.Module):
             {"image": blip2_imgs, "text_input": repeat_catpipns}, mode="multimodal")
 
         raw_multimodal_queries = blip2_output.multimodel_query # not fuse with text again, length=32
-        raw_multimodal_queries = self.query_num_resizer(raw_multimodal_queries.transpose(-1, -2)).transpose(-1, -2)
+        # raw_multimodal_queries = self.query_num_resizer(raw_multimodal_queries.transpose(-1, -2)).transpose(-1, -2)
+        raw_multimodal_queries = None
         # print(raw_multimodal_queries.shape)
         multimodal_queries = blip2_output.multimodal_embeds # fuse with text again, length=1
         multi_modal_embed = self.query_resizer(multimodal_queries)
