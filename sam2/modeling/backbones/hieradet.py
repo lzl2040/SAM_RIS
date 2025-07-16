@@ -408,7 +408,7 @@ class Hiera(nn.Module):
         self.blocks = nn.ModuleList()
         self.vision_multi_modal_fusions = nn.ModuleList()
 
-        # self.vision_text_fusions = nn.ModuleList()
+        self.vision_text_fusions = nn.ModuleList()
         pre_dim = 768
         sam2_dims = []
         for i in range(depth):
@@ -422,12 +422,12 @@ class Hiera(nn.Module):
                 window_size = 0 if i in self.global_att_blocks else window_size
 
             if i - 1 in self.stage_ends:
-            #     sam2_dims.append(dim_out)
-            #     # 视觉-语言融合，只在后三个层次的，选所有层次的多出600M内存
-            #     # if cur_stage > 1:
-            #     # multi-modal queries
-            #     fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
-            #     self.vision_multi_modal_fusions.append(fusion_module)
+                sam2_dims.append(dim_out)
+                # 视觉-语言融合，只在后三个层次的，选所有层次的多出600M内存
+                # if cur_stage > 1:
+                # multi-modal queries
+                fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
+                self.vision_multi_modal_fusions.append(fusion_module)
 
             #     # 每经过一个阶段，通道数翻倍 for base: 112 -> 224 -> 448 -> 896
                 dim_out = int(embed_dim * dim_mul)
@@ -448,10 +448,10 @@ class Hiera(nn.Module):
             self.blocks.append(block)
 
         # 最后一层
-        # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
-        # self.vision_multi_modal_fusions.append(fusion_module)
-        # sam2_dims.append(dim_out)
-        # print(sam2_dims)
+        fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
+        self.vision_multi_modal_fusions.append(fusion_module)
+        sam2_dims.append(dim_out)
+        print(sam2_dims)
 
         # self.cnn2sam_fusion = nn.ModuleList([
         #     LocalTokenAdapter(sam_dim=sam2_dim, dim=64, num_heads=4) for sam2_dim in sam2_dims
