@@ -408,7 +408,7 @@ class Hiera(nn.Module):
         self.blocks = nn.ModuleList()
         self.vision_multi_modal_fusions = nn.ModuleList()
 
-        self.vision_text_fusions = nn.ModuleList()
+        # self.vision_text_fusions = nn.ModuleList()
         pre_dim = 768
         sam2_dims = []
         for i in range(depth):
@@ -429,7 +429,7 @@ class Hiera(nn.Module):
                 fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
                 self.vision_multi_modal_fusions.append(fusion_module)
 
-            #     # 每经过一个阶段，通道数翻倍 for base: 112 -> 224 -> 448 -> 896
+                # 每经过一个阶段，通道数翻倍 for base: 112 -> 224 -> 448 -> 896
                 dim_out = int(embed_dim * dim_mul)
                 pre_dim = embed_dim
                 num_heads = int(num_heads * head_mul)

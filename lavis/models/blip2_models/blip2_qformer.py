@@ -506,8 +506,11 @@ class Blip2Qformer(Blip2Base):
                 query_embeds=raw_multimodal_embeds,
                 attention_mask=attention_mask,
                 return_dict=True,
-            ).last_hidden_state[:, 32:] # defalut use text token
-            # .last_hidden_state[:, :] # 
+            ).last_hidden_state[:, :] # defalut use text token
+            # last_hidden_state[:, 32:]  # defalut use text token
+            # .last_hidden_state[:, :] # all token
+            # .last_hidden_state[:, :32] # multi-model query token
+            # .last_hidden_state[:, 32:33] # global semantic token
 
             # multimodal_embeds = F.normalize(
             #     self.text_proj(text_output.last_hidden_state[:, 32:33, :]), dim=-1
