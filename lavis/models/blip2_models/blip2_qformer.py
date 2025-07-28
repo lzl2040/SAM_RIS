@@ -506,7 +506,7 @@ class Blip2Qformer(Blip2Base):
                 query_embeds=raw_multimodal_embeds,
                 attention_mask=attention_mask,
                 return_dict=True,
-            ).last_hidden_state[:, 32:] # defalut use text token
+            ).last_hidden_state[:, :32] # defalut use text token
             # last_hidden_state[:, 32:]  # defalut use text token
             # .last_hidden_state[:, :] # all token
             # .last_hidden_state[:, :32] # multi-model query token
