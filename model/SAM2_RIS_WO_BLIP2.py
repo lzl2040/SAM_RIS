@@ -200,6 +200,7 @@ class SAM2_RIS_WO_BLIP2(nn.Module):
         text_features, text_embeds = self.generate_text_features(captions)
         # print(text_features.shape, text_embeds.shape) # torch.Size([32, 21, 768]) torch.Size([32, 256])
 
+        text_features = None
         _features, vision_feats, vision_pos_embeds, query = self._image_encoder(image, text_features, cnn_tokens)
 
         img_embed, high_res_features = _features["image_embed"], _features["high_res_feats"]
