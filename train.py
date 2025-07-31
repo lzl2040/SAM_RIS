@@ -15,8 +15,8 @@ from pathlib import Path
 from tqdm import tqdm
 import os
 import logging
-# from model.SAM2_RIS import SAM2_RIS
-from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
+from model.SAM2_RIS import SAM2_RIS
+# from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
 from sam2.build_sam import build_sam2
 import data.transforms as T
 from config import config2model_path
