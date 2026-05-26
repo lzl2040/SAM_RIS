@@ -1,4 +1,4 @@
-torchrun --nproc_per_node=4 \
+torchrun --nproc_per_node=2 \
     train.py \
     --model_cfg sam2.1_hiera_l.yaml \
     --num_epochs 40 \
@@ -14,5 +14,5 @@ torchrun --nproc_per_node=4 \
     --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \
     --log_path /mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path \
     --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
-    --task_name 0526_MM_SAM_img_size_480_large_full_ddp_bs_144 \
+    --task_name 0526_MM_SAM_img_size_480_large_full_ddp_bs_72 \
     --distributed
