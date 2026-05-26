@@ -19,14 +19,16 @@ def get_w(weights, keyword):
 def load_blip2_qformer(path):
     qformer = Blip2Qformer()
     weights = torch.load(path, map_location='cpu')
-    print(weights.keys())  # dict_keys(['model', 'optimizer', 'config', 'scaler', 'iters'])
+    # print(weights.keys())  # dict_keys(['model', 'optimizer', 'config', 'scaler', 'iters'])
     model_weights = weights["model"]
     bert_weight = {_key: model_weights[_key] for _key in model_weights if 'bert' in _key}
     # print([_key for _key in model_weights if 'Qformer' in _key])
     # print([_key for _key in model_weights if 'bert' in _key])
     # print(get_w(bert_weight, "Qformer"))
-    qformer.Qformer.load_state_dict(get_w(bert_weight, "Qformer"), strict=False)
-    qformer.ln_vision.load_state_dict(get_w(model_weights, "ln_vision"))
+    missing_keys, unexpected_keys = qformer.Qformer.load_state_dict(get_w(bert_weight, "Qformer"), strict=False)
+    print("missing_keys", missing_keys)
+    print("unexpected_keys", unexpected_keys)
+    qformer.ln_vision.load_state_dict(get_w(model_weights, "ln_vision"), strict=True)
     qformer.query_tokens.data.copy_(model_weights['query_tokens'])
     del qformer.Qformer.cls.predictions.decoder.bias
     print("load blip2 over")
@@ -109,13 +111,6 @@ class SAM2_RIS(nn.Module):
         #     output_feat_size=args.query_num,
         #     dropout=0,
         # )
-        # self.cnn_extractor = timm.create_model(
-        #     "resnet50",
-        #     pretrained=True,
-        #     features_only=True,
-        #     out_indices=[1, 2, 3, 4],
-        # )
-        # self.cnn_token_generator = CNNTokenGenration(feature_channels=[256, 512, 1024, 2048])
         self.target_size = args.image_size
         # 特征大小
         feat_sizes = [256 // 2 ** i * self.target_size // 1024 for i in range(3)]
@@ -127,10 +122,6 @@ class SAM2_RIS(nn.Module):
         # self.focal_gamma_obj_score = 2
 
         self.args = args
-
-        # freeze cnn encoder
-        # for param in self.cnn_extractor.parameters():
-        #     param.requires_grad = False
 
         # freeze prompt encoder
         for param in self.sam2_model.sam_prompt_encoder.parameters():
@@ -165,31 +156,16 @@ class SAM2_RIS(nn.Module):
         # raw_multimodal_queries = self.query_num_resizer[0](raw_multimodal_queries.transpose(-1, -2)).transpose(-1, -2)
         # raw_multimodal_queries = None
         # print(raw_multimodal_queries.shape)
-        multimodal_queries = blip2_output.multimodal_embeds # fuse with text again, length=1
+        multimodal_queries = blip2_output.multimodal_embeds # fuse with text again
         multi_modal_embed = self.query_resizer(multimodal_queries)
 
         return raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score
-
-    def generate_cnn_tokens(self, feature_list):
-        batch_size = feature_list[0].shape[0]
-        cnn_token_list = []
-        for i in range(len(feature_list)):
-            cnn_image_token = self.cnn_token_generator.conv[i](feature_list[i])
-            latent_dim = cnn_image_token.shape[1]
-            cnn_image_token = cnn_image_token.permute(0, 2, 3, 1).reshape(
-                batch_size, -1, latent_dim
-            )
-            cnn_token_list.append(cnn_image_token)
-        return torch.cat(cnn_token_list, dim=1)
 
     def forward(self, image, cnn_image, raw_imgs, blip2_imgs, masks, captions, step, epoch, multi_mask=False):
         """
         image: (B, 3, 1024, 1024)
         """
-        # feature_list = self.cnn_extractor(cnn_image)
-        # cnn_tokens = self.generate_cnn_tokens(feature_list)
         cnn_tokens = None
-        # print(cnn_tokens.shape) # 4 N=196 C=64
         raw_multimodal_queries, multi_modal_embed, multimodal_queries, final_cross_attention_score = self.generate_queries(blip2_imgs=blip2_imgs,
                                                                           repeat_catpipns=captions)
 

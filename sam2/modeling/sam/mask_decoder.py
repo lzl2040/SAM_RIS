@@ -104,11 +104,11 @@ class MaskDecoder(nn.Module):
         if self.pred_obj_scores:
             self.pred_obj_score_head = nn.Linear(transformer_dim, 1)
             # score token + query num
-            self.pred_obj_score_head_with_query = nn.Linear(5 * transformer_dim, 1)
+            # self.pred_obj_score_head_with_query = nn.Linear(5 * transformer_dim, 1)
             if pred_obj_scores_mlp:
                 self.pred_obj_score_head = MLP(transformer_dim, transformer_dim, 1, 3)
                 # score token + query num
-                self.pred_obj_score_head_with_query = MLP(5 * transformer_dim, 5 * transformer_dim, 1, 3)
+                # self.pred_obj_score_head_with_query = MLP(5 * transformer_dim, 5 * transformer_dim, 1, 3)
 
         # When outputting a single mask, optionally we can dynamically fall back to the best
         # multimask output token if the single mask output token gives low stability scores.
