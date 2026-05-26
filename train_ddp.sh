@@ -1,3 +1,4 @@
+export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
 torchrun --nproc_per_node=4 \
     train.py \
     --model_cfg sam2.1_hiera_l.yaml \
