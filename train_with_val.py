@@ -257,12 +257,6 @@ def make_checkpoint(model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, be
 
 def main():
     parser = get_parser()
-    parser.add_argument("--val_interval", type=int, default=1,
-                        help="Run refcoco val evaluation every N epochs. Set <= 0 to disable validation.")
-    parser.add_argument("--val_print_interval", type=int, default=100,
-                        help="Print validation metrics every N validation loader steps.")
-    parser.add_argument("--auto_resume", action="store_true",
-                        help="Automatically resume from the newest checkpoint under work_dir/task_name-*.")
     args = parser.parse_args()
     sam2_checkpoint = config2model_path[args.model_cfg]
     os.makedirs(args.log_path, exist_ok=True)
