@@ -17,5 +17,5 @@ torchrun --nproc_per_node=4 \
     --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
     --task_name 0526_MM_SAM_img_size_480_large_full_bs_144_train_full_val_refcoco_val \
     --val_interval 1 \
-    --val_print_interval 100
+    --val_print_interval 100 \
     --distributed
