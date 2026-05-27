@@ -173,12 +173,96 @@ def validate_refcoco(model, data_loader, device, logger, epoch, print_interval):
 def local_print_step(step, print_interval):
     return print_interval > 0 and step % print_interval == 0
 
+
+def move_optimizer_to_device(optimizer, device):
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if torch.is_tensor(value):
+                state[key] = value.to(device)
+
+
+def load_resume_checkpoint(resume_path, model, optimizer, lr_scheduler, scaler, device, logger):
+    if not os.path.isfile(resume_path):
+        raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+
+    logger.info(f"=> loading resume checkpoint '{resume_path}'")
+    checkpoint = torch.load(resume_path, map_location="cpu")
+    model.load_state_dict(checkpoint["model"], strict=False)
+
+    if "optimizer" in checkpoint:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        move_optimizer_to_device(optimizer, device)
+    else:
+        logger.info("=> resume checkpoint has no optimizer state; optimizer starts fresh")
+
+    if "lr_sche" in checkpoint:
+        lr_scheduler.load_state_dict(checkpoint["lr_sche"])
+    else:
+        logger.info("=> resume checkpoint has no lr scheduler state; scheduler starts fresh")
+
+    if "scaler" in checkpoint:
+        scaler.load_state_dict(checkpoint["scaler"])
+    else:
+        logger.info("=> resume checkpoint has no GradScaler state; scaler starts fresh")
+
+    start_epoch = checkpoint.get("epoch", 0)
+    best_oIoU = checkpoint.get("best_oIoU", checkpoint.get("val_oIoU", -1.0))
+    best_loss = checkpoint.get("best_loss", 1e10)
+    logger.info(f"=> resumed from epoch {start_epoch}, best_oIoU={best_oIoU * 100:.4f}")
+    return start_epoch, best_oIoU, best_loss
+
+
+def find_latest_checkpoint(work_dir, task_name):
+    work_dir = Path(work_dir)
+    if not work_dir.is_dir():
+        return None
+
+    run_dirs = [path for path in work_dir.glob(f"{task_name}-*") if path.is_dir()]
+    if not run_dirs:
+        return None
+
+    candidates = []
+    for run_dir in run_dirs:
+        latest_path = run_dir / "ris_sam_model_latest.pth"
+        if latest_path.is_file():
+            candidates.append(latest_path)
+        candidates.extend(path for path in run_dir.glob("ris_sam_model_e_*.pth") if path.is_file())
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def make_checkpoint(model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss,
+                    val_metrics=None):
+    model_dict = model.state_dict()
+    save_dict = {k: v for k, v in model_dict.items() if 'mask_decoder' in k or 'Qformer' in k
+                 or 'resizer' in k or 'fusion' in k or 'score' in k or "obj_ptr_proj" in k
+                 or "lora" in k or "cnn" in k}
+    checkpoint = {
+        "model": save_dict,
+        "optimizer": optimizer.state_dict(),
+        "lr_sche": lr_scheduler.state_dict(),
+        "scaler": scaler.state_dict(),
+        "epoch": epoch + 1,
+        "best_oIoU": best_oIoU,
+        "best_loss": best_loss,
+    }
+    if val_metrics is not None:
+        checkpoint["val_mIoU"] = val_metrics["mIoU"]
+        checkpoint["val_oIoU"] = val_metrics["oIoU"]
+    return checkpoint, save_dict
+
+
 def main():
     parser = get_parser()
     parser.add_argument("--val_interval", type=int, default=1,
                         help="Run refcoco val evaluation every N epochs. Set <= 0 to disable validation.")
     parser.add_argument("--val_print_interval", type=int, default=100,
                         help="Print validation metrics every N validation loader steps.")
+    parser.add_argument("--auto_resume", action="store_true",
+                        help="Automatically resume from the newest checkpoint under work_dir/task_name-*.")
     args = parser.parse_args()
     sam2_checkpoint = config2model_path[args.model_cfg]
     os.makedirs(args.log_path, exist_ok=True)
@@ -279,24 +363,25 @@ def main():
                                                      lambda x: (1 - x / (len(train_loader) * num_epochs)) ** 0.9)
 
     start_epoch = 0
+    if args.resume is None and args.auto_resume:
+        latest_checkpoint = find_latest_checkpoint(args.work_dir, args.task_name)
+        if latest_checkpoint is not None:
+            args.resume = str(latest_checkpoint)
+            logger.info(f"=> auto resume found checkpoint '{args.resume}'")
+        else:
+            logger.info("=> auto resume found no checkpoint; starting a new run")
+
     if args.resume is not None:
-        if os.path.isfile(args.resume):
-            ## Map model to be loaded to specified single GPU
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume, map_location="cpu")
-            start_epoch = checkpoint["epoch"] + 1
-            sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
-            optimizer.load_state_dict(checkpoint["optimizer"])
-            # scheduler.load_state_dict(checkpoint["sche"])
-            lr_scheduler.load_state_dict(checkpoint["lr_sche"])
-            best_oIoU = checkpoint.get("best_oIoU", best_oIoU)
+        start_epoch, best_oIoU, best_loss = load_resume_checkpoint(
+            args.resume, sam_ris_model, optimizer, lr_scheduler, scaler, device, logger
+        )
         model_save_path = Path(args.resume).parent
         # sam_rvos_model.set_model_save_path(model_save_path)
     else:
         run_id = datetime.now().strftime("%Y%m%d-%H%M")
         model_save_path = os.path.join(args.work_dir, args.task_name + "-" + run_id)
         os.makedirs(model_save_path, exist_ok=True)
-    if args.pretrain is not None:
+    if args.pretrain is not None and args.resume is None:
         checkpoint = torch.load(args.pretrain, map_location="cpu")
         sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
         print("=> loading pretrain checkpoint '{}'".format(args.pretrain))
@@ -342,20 +427,12 @@ def main():
         if local_rank == 0:
             logger.info(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
             ## save the latest model
-            model_dict = sam_ris_model.state_dict()
-            save_dict = {k: v for k, v in model_dict.items() if 'mask_decoder' in k or 'Qformer' in k
-                         or 'resizer' in k or 'fusion' in k or 'score' in k or "obj_ptr_proj" in k
-                         or "lora" in k or "cnn" in k}
+            checkpoint, save_dict = make_checkpoint(
+                sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+            )
             logger.info(save_dict.keys())
-            checkpoint = {
-                "model": save_dict,
-                "optimizer": optimizer.state_dict(),
-                # "sche" : scheduler.state_dict(),
-                "lr_sche" : lr_scheduler.state_dict(),
-                "epoch": epoch + 1,
-                "best_oIoU": best_oIoU,
-            }
             torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
+            torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
 
             if val_loader is not None and (epoch + 1) % args.val_interval == 0:
                 val_metrics = validate_refcoco(sam_ris_model, val_loader, device, logger, epoch,
@@ -363,16 +440,10 @@ def main():
                 val_oIoU = val_metrics["oIoU"]
                 if val_oIoU > best_oIoU:
                     best_oIoU = val_oIoU
-                    checkpoint = {
-                        "model": save_dict,
-                        "optimizer": optimizer.state_dict(),
-                        # "sche": scheduler.state_dict(),
-                        "lr_sche": lr_scheduler.state_dict(),
-                        "epoch": epoch + 1,
-                        "best_oIoU": best_oIoU,
-                        "val_mIoU": val_metrics["mIoU"],
-                        "val_oIoU": val_oIoU,
-                    }
+                    checkpoint, _ = make_checkpoint(
+                        sam_ris_model, optimizer, lr_scheduler, scaler, epoch,
+                        best_oIoU, best_loss, val_metrics=val_metrics
+                    )
                     torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_best_oiou.pth"))
                     logger.info(f"Saved best oIoU checkpoint at epoch {epoch + 1}: "
                                 f"oIoU={best_oIoU * 100:.4f}")
@@ -381,14 +452,16 @@ def main():
             ## save a fallback best model by training loss only when validation is disabled
             if val_loader is None and epoch_loss < best_loss:
                 best_loss = epoch_loss
-                checkpoint = {
-                    "model": save_dict,
-                    "optimizer": optimizer.state_dict(),
-                    # "sche": scheduler.state_dict(),
-                    "lr_sche": lr_scheduler.state_dict(),
-                    "epoch": epoch + 1,
-                }
+                checkpoint, _ = make_checkpoint(
+                    sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+                )
                 torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_best.pth"))
+
+            checkpoint, _ = make_checkpoint(
+                sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+            )
+            torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
+            torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
 
         # %% plot loss
         plt.plot(losses)
@@ -397,6 +470,9 @@ def main():
         plt.ylabel("Loss")
         plt.savefig(os.path.join(model_save_path, args.task_name + "train_loss.png"))
         plt.close()
+
+        if args.distributed:
+            distributed.barrier()
 
 if __name__ == '__main__':
     main()
