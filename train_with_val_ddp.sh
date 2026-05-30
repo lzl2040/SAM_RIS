@@ -11,11 +11,11 @@ torchrun --nproc_per_node=8 \
     --print_interval 20 \
     --save_visual_interval 100 \
     --query_num 24 \
-    --lr 5e-4 \
+    --lr 2e-4 \
     --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \
     --log_path /mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path \
     --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
-    --task_name 0539_MM_SAM_img_size_480_large_full_8gpu_bs_288_lr_5e-4_train_full_val_refcoco_val \
+    --task_name 0530_MM_SAM_img_size_480_large_full_8gpu_bs_288_lr_2e-4_train_full_val_refcoco_val \
     --val_interval 1 \
     --val_print_interval 100 \
     --distributed \
