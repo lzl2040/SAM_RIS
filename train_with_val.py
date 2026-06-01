@@ -15,6 +15,7 @@ from pathlib import Path
 from tqdm import tqdm
 import os
 import logging
+from contextlib import nullcontext
 from torch.nn import functional as F
 from model.SAM2_RIS import SAM2_RIS
 # from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
@@ -292,19 +293,20 @@ def main():
 
     if args.distributed:
         sam_ris_model = torch.nn.parallel.DistributedDataParallel(sam_ris_model, device_ids=[local_rank],
-                                                                   output_device=local_rank, broadcast_buffers=False)
-        sam_ris_model = sam_ris_model.module
+                                                                   output_device=local_rank, broadcast_buffers=False,
+                                                                   find_unused_parameters=True)
+    model_without_ddp = sam_ris_model.module if args.distributed else sam_ris_model
     sam_ris_model.train()
 
     if local_rank == 0:
-        total_params = sum(p.numel() for p in sam_ris_model.parameters())
-        trainable_params = sum(p.numel() for p in sam_ris_model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model_without_ddp.parameters())
+        trainable_params = sum(p.numel() for p in model_without_ddp.parameters() if p.requires_grad)
         # blip2_qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.parameters())
         # qformer_params = sum(p.numel() for p in sam_ris_model.blip2_qformer.Qformer.parameters())
-        image_encoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.image_encoder.parameters())
-        mask_decoder_params = sum(p.numel() for p in sam_ris_model.sam2_model.sam_mask_decoder.parameters())
+        image_encoder_params = sum(p.numel() for p in model_without_ddp.sam2_model.image_encoder.parameters())
+        mask_decoder_params = sum(p.numel() for p in model_without_ddp.sam2_model.sam_mask_decoder.parameters())
         fusion_params_list = [
-            (name, param) for name, param in sam_ris_model.sam2_model.image_encoder.named_parameters()
+            (name, param) for name, param in model_without_ddp.sam2_model.image_encoder.named_parameters()
             if "fusion" in name
         ]
         fusion_params = sum(p.numel() for _, p in fusion_params_list)
@@ -367,7 +369,7 @@ def main():
 
     if args.resume is not None:
         start_epoch, best_oIoU, best_loss = load_resume_checkpoint(
-            args.resume, sam_ris_model, optimizer, lr_scheduler, scaler, device, logger
+            args.resume, model_without_ddp, optimizer, lr_scheduler, scaler, device, logger
         )
         model_save_path = Path(args.resume).parent
         # sam_rvos_model.set_model_save_path(model_save_path)
@@ -377,12 +379,13 @@ def main():
         os.makedirs(model_save_path, exist_ok=True)
     if args.pretrain is not None and args.resume is None:
         checkpoint = torch.load(args.pretrain, map_location="cpu")
-        sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
+        model_without_ddp.load_state_dict(checkpoint["model"], strict=False)
         print("=> loading pretrain checkpoint '{}'".format(args.pretrain))
 
-    sam_ris_model.set_model_save_path(model_save_path)
+    model_without_ddp.set_model_save_path(model_save_path)
     # step = 0
     loss_avg = AverageMeter()
+    optimizer.zero_grad()
 
     for epoch in range(start_epoch, num_epochs):
         epoch_loss = 0
@@ -395,47 +398,49 @@ def main():
             # imgs = rearrange(imgs, "b t c h w -> (b t) c h w")
             masks = rearrange(masks, "b h w -> b 1 h w")
             # blip2_imgs = rearrange(blip2_imgs, "b c h w -> b h w c")
-            with torch.cuda.amp.autocast():
-                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
-                loss = seg_loss(pred_logits, masks.float()) + ce_loss(pred_logits, masks.float())
-
-                loss_avg.update(loss.item(), imgs.shape[0])
-                if step % args.print_interval == 0 and local_rank == 0:
-                    logger.info(f"Epoch: {epoch}/{num_epochs} Step:{step}/{len(train_loader)} Lr:{optimizer.param_groups[0]['lr']} "
-                          f"Loss:{loss_avg.val}/{loss_avg.avg}")
-                loss = loss / args.grad_accumulation_steps
-
-            if (step + 1) % args.grad_accumulation_steps == 0:
+            should_step = (step + 1) % args.grad_accumulation_steps == 0 or (step + 1) == len(train_loader)
+            is_accumulating = not should_step
+            sync_context = sam_ris_model.no_sync if args.distributed and is_accumulating else nullcontext
+            with sync_context():
+                with torch.cuda.amp.autocast():
+                    pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
+                    loss = seg_loss(pred_logits, masks.float()) + ce_loss(pred_logits, masks.float())
+                    loss_avg.update(loss.item(), imgs.shape[0])
+                    epoch_loss += loss.item()
+                    if step % args.print_interval == 0 and local_rank == 0:
+                        logger.info(f"Epoch: {epoch}/{num_epochs} Step:{step}/{len(train_loader)} Lr:{optimizer.param_groups[0]['lr']} "
+                              f"Loss:{loss_avg.val}/{loss_avg.avg}")
+                    loss = loss / args.grad_accumulation_steps
                 scaler.scale(loss).backward()
+
+            if should_step:
                 scaler.step(optimizer)
                 scaler.update()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-            epoch_loss += loss.item()
-
         # scheduler.step()
-        epoch_loss /= step
+        epoch_loss /= (step + 1)
         losses.append(epoch_loss)
 
         if local_rank == 0:
             logger.info(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
             ## save the latest model
             checkpoint, save_dict = make_checkpoint(
-                sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+                model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
             )
             logger.info(save_dict.keys())
             torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
             torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
 
             if val_loader is not None and (epoch + 1) % args.val_interval == 0:
-                val_metrics = validate_refcoco(sam_ris_model, val_loader, device, logger, epoch,
+                val_metrics = validate_refcoco(model_without_ddp, val_loader, device, logger, epoch,
                                                args.val_print_interval)
                 val_oIoU = val_metrics["oIoU"]
                 if val_oIoU > best_oIoU:
                     best_oIoU = val_oIoU
                     checkpoint, _ = make_checkpoint(
-                        sam_ris_model, optimizer, lr_scheduler, scaler, epoch,
+                        model_without_ddp, optimizer, lr_scheduler, scaler, epoch,
                         best_oIoU, best_loss, val_metrics=val_metrics
                     )
                     torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_best_oiou.pth"))
@@ -447,12 +452,12 @@ def main():
             if val_loader is None and epoch_loss < best_loss:
                 best_loss = epoch_loss
                 checkpoint, _ = make_checkpoint(
-                    sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+                    model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
                 )
                 torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_best.pth"))
 
             checkpoint, _ = make_checkpoint(
-                sam_ris_model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
+                model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
             )
             torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
             torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
