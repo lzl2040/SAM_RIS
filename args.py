@@ -18,8 +18,14 @@ def get_parser():
     parser.add_argument("--model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
     parser.add_argument("--sam2_pretrain_path", type=str,
                         default="/home/v-zuoleili/Pretrain/sam2.1_hiera_small.pt")
+    parser.add_argument("--sam_model_type", type=str, default="vit_b", choices=["vit_b", "vit_h"],
+                        help="Segment Anything image encoder/mask decoder variant for SAM_RIS.")
+    parser.add_argument("--sam_pretrain_path", type=str, default=None,
+                        help="Path to original SAM checkpoint. Defaults to /data/weights/Pretrain/sam_vit_*.pth.")
     parser.add_argument("--blip2_path", type=str,
                         default="/home/v-zuoleili/Pretrain/instruct_blip_vicuna7b_trimmed.pth")
+    parser.add_argument("--blip2_vit_model", type=str, default="eva_clip_g", choices=["clip_L", "eva_clip_g"],
+                        help="Vision transformer model for BLIP-2.")
     parser.add_argument("--work_dir", type=str, default="./work_dir")
     parser.add_argument("--log_path", type=str, default="./log_path")
     parser.add_argument("--pred_save_dir", type=str, default="./pred_visual")

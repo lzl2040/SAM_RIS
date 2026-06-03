@@ -16,8 +16,9 @@ from utils.visual import draw_contours
 def get_w(weights, keyword):
     return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
 
-def load_blip2_qformer(path):
-    qformer = Blip2Qformer()
+def load_blip2_qformer(path, vit_model="eva_clip_g"):
+    # vit_model="clip_L", "eva_clip_g"
+    qformer = Blip2Qformer(vit_model=vit_model)
     weights = torch.load(path, map_location='cpu')
     # print(weights.keys())  # dict_keys(['model', 'optimizer', 'config', 'scaler', 'iters'])
     model_weights = weights["model"]
@@ -93,7 +94,7 @@ class SAM2_RIS(nn.Module):
         super().__init__()
         self.device = device
         self.sam2_model = model
-        self.blip2_qformer = load_blip2_qformer(args.blip2_path)
+        self.blip2_qformer = load_blip2_qformer(args.blip2_path, args.blip2_vit_model)
         # multi model queries
         self.query_resizer = FeatureResizer(
             input_feat_size=768,

@@ -187,7 +187,7 @@ def load_resume_checkpoint(resume_path, model, optimizer, lr_scheduler, scaler, 
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
 
     logger.info(f"=> loading resume checkpoint '{resume_path}'")
-    checkpoint = torch.load(resume_path, map_location="cpu")
+    checkpoint = torch.load(resume_path, map_location="cpu", weights_only=False)
     model.load_state_dict(checkpoint["model"], strict=False)
 
     if "optimizer" in checkpoint:
@@ -378,7 +378,7 @@ def main():
         model_save_path = os.path.join(args.work_dir, args.task_name + "-" + run_id)
         os.makedirs(model_save_path, exist_ok=True)
     if args.pretrain is not None and args.resume is None:
-        checkpoint = torch.load(args.pretrain, map_location="cpu")
+        checkpoint = torch.load(args.pretrain, map_location="cpu", weights_only=False)
         model_without_ddp.load_state_dict(checkpoint["model"], strict=False)
         print("=> loading pretrain checkpoint '{}'".format(args.pretrain))
 

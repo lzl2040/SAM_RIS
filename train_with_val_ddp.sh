@@ -1,4 +1,6 @@
 export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
+# instruct_blip_vicuna7b_trimmed.pth
+# blip2_pretrained_vitL.pth
 torchrun --nproc_per_node=8 \
     train_with_val.py \
     --model_cfg sam2.1_hiera_l.yaml \
@@ -14,8 +16,9 @@ torchrun --nproc_per_node=8 \
     --lr 5e-4 \
     --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \
     --log_path /mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path \
-    --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
-    --task_name 0602_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_5e-4_train_full_val_refcoco_val \
+    --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/blip2_pretrained_vitL.pth \
+    --blip2_vit_model clip_L \
+    --task_name 0603_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_5e-4_train_full_val_refcoco_val_ab_mm_encoder_blip2_pt_vitL \
     --val_interval 1 \
     --val_print_interval 100 \
     --distributed \
