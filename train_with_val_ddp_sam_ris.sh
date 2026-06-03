@@ -2,6 +2,7 @@ export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
 # instruct_blip_vicuna7b_trimmed.pth
 # blip2_pretrained_vitL.pth
 torchrun --nproc_per_node=8 \
+  train_with_val_sam_ris.py \
   --sam_model_type vit_h \
   --sam_pretrain_path /mnt/lizuolei/gxy/checkpoints/Pretrain/sam_vit_h_4b8939.pth \
   --refer_data_root /mnt/lizuolei/gxy/Data/coco \
