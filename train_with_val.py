@@ -124,6 +124,8 @@ def build_refcoco_val_loader(args, image_transforms, cnn_transform):
 def validate_refcoco(model, data_loader, device, logger, epoch, print_interval):
     cum_I, cum_U = 0, 0
     mean_iou = AverageMeter()
+    eval_seg_iou_list = [.5, .6, .7, .8, .9]
+    seg_correct = np.zeros(len(eval_seg_iou_list), dtype=np.int32)
     seg_total = 0
 
     model.eval()
@@ -156,19 +158,32 @@ def validate_refcoco(model, data_loader, device, logger, epoch, print_interval):
                 mean_iou.update(this_iou)
                 cum_I += I
                 cum_U += U
+                for n_eval_iou in range(len(eval_seg_iou_list)):
+                    eval_seg_iou = eval_seg_iou_list[n_eval_iou]
+                    seg_correct[n_eval_iou] += (this_iou >= eval_seg_iou)
                 seg_total += 1
 
             if local_print_step(step, print_interval):
                 o_iou = 0.0 if cum_U == 0 else cum_I / cum_U
+                precision_log = ", ".join(
+                    f"Pr@{eval_seg_iou_list[i]:.1f}:{seg_correct[i] * 100.0 / max(seg_total, 1):.2f}"
+                    for i in range(len(eval_seg_iou_list))
+                )
                 logger.info(f"Val Epoch: {epoch + 1} Step:{step}/{len(data_loader)} "
-                            f"mIoU:{mean_iou.avg * 100:.4f}, oIoU:{o_iou * 100:.4f}")
+                            f"mIoU:{mean_iou.avg * 100:.4f}, oIoU:{o_iou * 100:.4f}, "
+                            f"{precision_log}")
 
     m_iou = mean_iou.avg
     o_iou = 0.0 if cum_U == 0 else cum_I / cum_U
+    precision_metrics = {
+        f"Precision@{eval_seg_iou_list[i]:.1f}": seg_correct[i] * 100.0 / max(seg_total, 1)
+        for i in range(len(eval_seg_iou_list))
+    }
+    precision_log = ", ".join(f"{key}: {value:.2f}%" for key, value in precision_metrics.items())
     logger.info(f"Val Final Epoch: {epoch + 1}, Samples: {seg_total}, "
-                f"mIoU: {m_iou * 100:.4f}, oIoU: {o_iou * 100:.4f}")
+                f"mIoU: {m_iou * 100:.4f}, oIoU: {o_iou * 100:.4f}, {precision_log}")
     model.train()
-    return {"mIoU": m_iou, "oIoU": o_iou}
+    return {"mIoU": m_iou, "oIoU": o_iou, **precision_metrics}
 
 
 def local_print_step(step, print_interval):
@@ -251,8 +266,8 @@ def make_checkpoint(model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, be
         "best_loss": best_loss,
     }
     if val_metrics is not None:
-        checkpoint["val_mIoU"] = val_metrics["mIoU"]
-        checkpoint["val_oIoU"] = val_metrics["oIoU"]
+        for metric_name, metric_value in val_metrics.items():
+            checkpoint[f"val_{metric_name}"] = metric_value
     return checkpoint, save_dict
 
 
