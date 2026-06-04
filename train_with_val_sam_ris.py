@@ -232,6 +232,16 @@ def local_print_step(step, print_interval):
     return print_interval > 0 and step % print_interval == 0
 
 
+def format_validation_metrics(metrics):
+    metric_text = []
+    for metric_name, metric_value in metrics.items():
+        if metric_name in ("mIoU", "oIoU"):
+            metric_text.append(f"{metric_name}: {metric_value * 100:.4f}%")
+        else:
+            metric_text.append(f"{metric_name}: {metric_value:.2f}%")
+    return ", ".join(metric_text)
+
+
 def move_optimizer_to_device(optimizer, device):
     for state in optimizer.state.values():
         for key, value in state.items():
@@ -391,6 +401,9 @@ def main():
     losses = []
     best_loss = 1e10
     best_oIoU = -1.0
+    best_val_epoch = None
+    best_val_metrics = None
+    best_loss_epoch = None
 
     image_transforms, cnn_transform = get_transform(args)
     train_dataset = get_dataset("train",
@@ -523,6 +536,8 @@ def main():
                 val_oIoU = val_metrics["oIoU"]
                 if val_oIoU > best_oIoU:
                     best_oIoU = val_oIoU
+                    best_val_epoch = epoch + 1
+                    best_val_metrics = val_metrics.copy()
                     checkpoint, _ = make_checkpoint(
                         model_without_ddp, optimizer, lr_scheduler, scaler, epoch,
                         best_oIoU, best_loss, val_metrics=val_metrics
@@ -535,6 +550,7 @@ def main():
             ## save a fallback best model by training loss only when validation is disabled
             if val_loader is None and epoch_loss < best_loss:
                 best_loss = epoch_loss
+                best_loss_epoch = epoch + 1
                 checkpoint, _ = make_checkpoint(
                     model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
                 )
@@ -556,6 +572,18 @@ def main():
 
         if args.distributed:
             distributed.barrier()
+    if local_rank == 0:
+        if best_val_metrics is not None:
+            logger.info(
+                f"Training completed. Best validation epoch: {best_val_epoch}, "
+                f"{format_validation_metrics(best_val_metrics)}"
+            )
+        else:
+            logger.info("Training completed. No validation metrics were recorded.")
+        if best_loss_epoch is not None:
+            logger.info(f"Best training loss epoch: {best_loss_epoch}, loss: {best_loss:.4f}")
+        elif best_val_metrics is None:
+            logger.info(f"Best oIoU: {best_oIoU * 100:.4f}%, best_loss: {best_loss:.4f}")
 
 if __name__ == '__main__':
     main()
