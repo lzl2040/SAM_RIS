@@ -488,6 +488,7 @@ class Blip2Qformer(Blip2Base):
             )
             attention_mask = torch.cat([query_atts, text.attention_mask], dim=1)
 
+            # [query_tokens, text tokens] as input, image features as cross-attention source
             output = self.Qformer.bert(
                 text.input_ids,
                 query_embeds=query_tokens,
@@ -498,7 +499,11 @@ class Blip2Qformer(Blip2Base):
                 return_dict=True,
             )
             # text_sen_feats = output.pooler_output
-            raw_multimodal_embeds = output.last_hidden_state[:, : query_tokens.size(1), :]
+            # use q_e
+            # raw_multimodal_embeds = output.last_hidden_state[:, : query_tokens.size(1), :]
+            # multimodal_embeds = raw_multimodal_embeds
+            # use t_e
+            raw_multimodal_embeds = output.last_hidden_state[:, query_tokens.size(1):, :]
             multimodal_embeds = raw_multimodal_embeds
 
             # 跟文本再次融合
