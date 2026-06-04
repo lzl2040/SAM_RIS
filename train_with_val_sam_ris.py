@@ -370,7 +370,7 @@ def main():
         seg_loss = DiceLoss(sigmoid=True, squared_pred=True, reduction="mean")
     # cross entropy loss
     ce_loss = nn.BCEWithLogitsLoss(reduction="mean")
-    scaler = GradScaler()
+    scaler = GradScaler(enabled=not args.disable_amp)
 
     num_epochs = args.num_epochs
     losses = []
@@ -434,6 +434,7 @@ def main():
 
     for epoch in range(start_epoch, num_epochs):
         epoch_loss = 0
+        valid_steps = 0
         if args.distributed:
             train_sampler.set_epoch(epoch)
         for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(train_loader)):
@@ -447,11 +448,31 @@ def main():
             is_accumulating = not should_step
             sync_context = sam_ris_model.no_sync if args.distributed and is_accumulating else nullcontext
             with sync_context():
-                with torch.cuda.amp.autocast():
+                with torch.cuda.amp.autocast(enabled=not args.disable_amp):
                     pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = sam_ris_model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, masks, captions, step, epoch)
+                    if args.logit_clip_value > 0:
+                        pred_logits = torch.clamp(pred_logits, -args.logit_clip_value, args.logit_clip_value)
                     loss = seg_loss(pred_logits, masks.float()) + ce_loss(pred_logits, masks.float())
-                    loss_avg.update(loss.item(), imgs.shape[0])
-                    epoch_loss += loss.item()
+                    finite_loss = torch.isfinite(loss)
+                    if args.distributed:
+                        finite_flag = finite_loss.to(dtype=torch.float32, device=device)
+                        distributed.all_reduce(finite_flag, op=distributed.ReduceOp.MIN)
+                        finite_loss = finite_flag.item() > 0
+                    else:
+                        finite_loss = finite_loss.item()
+                    if not finite_loss:
+                        if local_rank == 0:
+                            logger.info(
+                                f"Skip non-finite loss at epoch {epoch}, step {step}. "
+                                f"pred range=({torch.nan_to_num(pred_logits).min().item():.4f}, "
+                                f"{torch.nan_to_num(pred_logits).max().item():.4f})"
+                            )
+                        optimizer.zero_grad()
+                        continue
+                    loss_item = loss.item()
+                    loss_avg.update(loss_item, imgs.shape[0])
+                    epoch_loss += loss_item
+                    valid_steps += 1
                     if step % args.print_interval == 0 and local_rank == 0:
                         logger.info(f"Epoch: {epoch}/{num_epochs} Step:{step}/{len(train_loader)} Lr:{optimizer.param_groups[0]['lr']} "
                               f"Loss:{loss_avg.val}/{loss_avg.avg}")
@@ -459,13 +480,16 @@ def main():
                 scaler.scale(loss).backward()
 
             if should_step:
+                if args.grad_clip_norm > 0:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(trainable_params, args.grad_clip_norm)
                 scaler.step(optimizer)
                 scaler.update()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
         # scheduler.step()
-        epoch_loss /= (step + 1)
+        epoch_loss /= max(valid_steps, 1)
         losses.append(epoch_loss)
 
         if local_rank == 0:

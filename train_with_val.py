@@ -437,6 +437,7 @@ def main():
                 val_metrics = validate_refcoco(model_without_ddp, val_loader, device, logger, epoch,
                                                args.val_print_interval)
                 val_oIoU = val_metrics["oIoU"]
+                logger.info(f"Validation at epoch {epoch + 1}: mIoU={val_metrics['mIoU'] * 100:.4f}, oIoU={val_oIoU * 100:.4f}")
                 if val_oIoU > best_oIoU:
                     best_oIoU = val_oIoU
                     checkpoint, _ = make_checkpoint(
