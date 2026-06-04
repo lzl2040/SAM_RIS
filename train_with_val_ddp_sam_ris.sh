@@ -12,8 +12,8 @@ torchrun --nproc_per_node=8 \
   --image_size 480 \
   --dataset all \
   --print_interval 40 \
-  --task_name 0603_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_5e-5_train_full_val_refcoco_val_ab_sam_huge \
-  --lr 5e-5 \
+  --task_name 0603_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_2e-4_train_full_val_refcoco_val_ab_sam_huge \
+  --lr 2e-4 \
   --grad_clip_norm 1.0 \
   --logit_clip_value 32.0 \
   --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \

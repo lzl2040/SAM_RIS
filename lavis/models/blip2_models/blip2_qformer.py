@@ -500,19 +500,19 @@ class Blip2Qformer(Blip2Base):
             )
             # text_sen_feats = output.pooler_output
             # use q_e
-            # raw_multimodal_embeds = output.last_hidden_state[:, : query_tokens.size(1), :]
+            raw_multimodal_embeds = output.last_hidden_state[:, : query_tokens.size(1), :]
             # multimodal_embeds = raw_multimodal_embeds
             # use t_e
-            raw_multimodal_embeds = output.last_hidden_state[:, query_tokens.size(1):, :]
-            multimodal_embeds = raw_multimodal_embeds
+            # raw_multimodal_embeds = output.last_hidden_state[:, query_tokens.size(1):, :]
+            # multimodal_embeds = raw_multimodal_embeds
 
             # 跟文本再次融合
-            # multimodal_embeds = self.Qformer.bert(
-            #     text.input_ids,
-            #     query_embeds=raw_multimodal_embeds,
-            #     attention_mask=attention_mask,
-            #     return_dict=True,
-            # ).last_hidden_state[:, 32:] # defalut use text token
+            multimodal_embeds = self.Qformer.bert(
+                text.input_ids,
+                query_embeds=raw_multimodal_embeds,
+                attention_mask=attention_mask,
+                return_dict=True,
+            ).last_hidden_state[:, 32:] # defalut use text token
             # last_hidden_state[:, 32:]  # defalut use text token
             # .last_hidden_state[:, :] # all token
             # .last_hidden_state[:, :32] # multi-model query token
