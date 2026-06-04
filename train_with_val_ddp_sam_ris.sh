@@ -1,6 +1,7 @@
 export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
 # instruct_blip_vicuna7b_trimmed.pth
 # blip2_pretrained_vitL.pth
+unset NCCL_DEBUG
 torchrun --nproc_per_node=8 \
   train_with_val_sam_ris.py \
   --sam_model_type vit_h \
