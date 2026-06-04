@@ -41,6 +41,12 @@ def get_parser():
     parser.add_argument("--mask_decoder_lr", type=float, default=3e-5, metavar="LR",
                         help="learning rate (absolute lr), 6e-5")
     parser.add_argument("--grad_accumulation_steps", type=int, default=1)
+    parser.add_argument("--grad_clip_norm", type=float, default=1.0,
+                        help="Clip gradient norm after AMP unscale. Set <= 0 to disable.")
+    parser.add_argument("--logit_clip_value", type=float, default=32.0,
+                        help="Clamp mask logits before loss. Set <= 0 to disable.")
+    parser.add_argument("--disable_amp", action="store_true",
+                        help="Disable mixed precision training when NaN/Inf is frequent.")
     parser.add_argument("--resume", type=str, default=None, help="Resuming training from checkpoint")
     parser.add_argument("--pretrain", type=str, default=None, help="Resuming training from checkpoint")
 
