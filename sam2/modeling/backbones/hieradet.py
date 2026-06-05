@@ -426,8 +426,8 @@ class Hiera(nn.Module):
                 # 视觉-语言融合，只在后三个层次的，选所有层次的多出600M内存
                 # if cur_stage > 1:
                 # multi-modal queries
-                fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
-                self.vision_multi_modal_fusions.append(fusion_module)
+                # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
+                # self.vision_multi_modal_fusions.append(fusion_module)
 
                 # 每经过一个阶段，通道数翻倍 for base: 112 -> 224 -> 448 -> 896
                 dim_out = int(embed_dim * dim_mul)
@@ -445,15 +445,15 @@ class Hiera(nn.Module):
             )
             # every layer
             # multi-modal queries
-            # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
-            # self.vision_multi_modal_fusions.append(fusion_module)
+            fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
+            self.vision_multi_modal_fusions.append(fusion_module)
 
             embed_dim = dim_out
             self.blocks.append(block)
 
         # 最后一层
-        fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
-        self.vision_multi_modal_fusions.append(fusion_module)
+        # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
+        # self.vision_multi_modal_fusions.append(fusion_module)
         sam2_dims.append(dim_out)
         print(sam2_dims)
 
@@ -490,14 +490,14 @@ class Hiera(nn.Module):
         for i, blk in enumerate(self.blocks):
             x = blk(x)
             # every layer
-            # if multi_modal_queries != None:
-            #     feats = x.permute(0, 3, 1, 2)
-            #     feats, _ = self.vision_multi_modal_fusions[i](tgt=feats,
-            #                                 memory=multi_modal_queries,
-            #                                 memory_key_padding_mask=None,
-            #                                 pos=None,
-            #                                 query_pos=None)
-            #     x = feats.permute(0, 2, 3, 1)
+            if multi_modal_queries != None:
+                feats = x.permute(0, 3, 1, 2)
+                feats, _ = self.vision_multi_modal_fusions[i](tgt=feats,
+                                            memory=multi_modal_queries,
+                                            memory_key_padding_mask=None,
+                                            pos=None,
+                                            query_pos=None)
+                x = feats.permute(0, 2, 3, 1)
             if (i == self.stage_ends[-1]) or (
                 i in self.stage_ends and self.return_interm_layers
             ):
@@ -509,19 +509,19 @@ class Hiera(nn.Module):
                 
                 # if stage > 1:
                 # 进行融合 multi-modal
-                if multi_modal_queries != None:
-                    feats, _ = self.vision_multi_modal_fusions[stage](tgt=feats,
-                                             memory=multi_modal_queries,
-                                             memory_key_padding_mask=None,
-                                             pos=None,
-                                             query_pos=None)
-                    outputs.append(feats)
-                    stage += 1
-                    # 这一步显存要求很大
-                    x = feats.permute(0, 2, 3, 1)
-                else:
-                    outputs.append(feats)
-                    stage += 1
+                # if multi_modal_queries != None:
+                #     feats, _ = self.vision_multi_modal_fusions[stage](tgt=feats,
+                #                              memory=multi_modal_queries,
+                #                              memory_key_padding_mask=None,
+                #                              pos=None,
+                #                              query_pos=None)
+                #     outputs.append(feats)
+                #     stage += 1
+                #     # 这一步显存要求很大
+                #     x = feats.permute(0, 2, 3, 1)
+                # else:
+                outputs.append(feats)
+                stage += 1
 
         '''outputs组成: 1024
             torch.Size([9, 96, 256, 256])
