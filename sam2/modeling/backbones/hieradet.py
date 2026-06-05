@@ -445,15 +445,15 @@ class Hiera(nn.Module):
             )
             # every layer
             # multi-modal queries
-            fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
-            self.vision_multi_modal_fusions.append(fusion_module)
+            # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size=768, nhead=8, dropout=0.1, need_query_resizer = (cur_stage == 1))
+            # self.vision_multi_modal_fusions.append(fusion_module)
 
             embed_dim = dim_out
             self.blocks.append(block)
 
         # 最后一层
-        # fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
-        # self.vision_multi_modal_fusions.append(fusion_module)
+        fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
+        self.vision_multi_modal_fusions.append(fusion_module)
         sam2_dims.append(dim_out)
         print(sam2_dims)
 
@@ -487,10 +487,13 @@ class Hiera(nn.Module):
 
         outputs = []
         stage = 0
+        early_layer_idx = len(self.blocks) // 4
+        mid_layer_idx = len(self.blocks) // 2
+        last_layer_idx = len(self.blocks) - 1
         for i, blk in enumerate(self.blocks):
             x = blk(x)
             # every layer
-            if multi_modal_queries != None:
+            if multi_modal_queries != None and i == early_layer_idx:
                 feats = x.permute(0, 3, 1, 2)
                 feats, _ = self.vision_multi_modal_fusions[i](tgt=feats,
                                             memory=multi_modal_queries,

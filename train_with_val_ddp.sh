@@ -19,7 +19,7 @@ torchrun --nproc_per_node=8 \
     --log_path /mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path \
     --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
     --blip2_vit_model eva_clip_g \
-    --task_name 0605_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_2e-4_train_full_val_refcoco_val_ab_mma_every_layer \
+    --task_name 0605_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_2e-4_train_full_val_refcoco_val_ab_mma_early_layer_one \
     --val_interval 1 \
     --val_print_interval 100 \
     --distributed \
