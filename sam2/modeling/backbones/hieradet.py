@@ -452,7 +452,7 @@ class Hiera(nn.Module):
             self.blocks.append(block)
 
         # 最后一层
-        fusion_module = VisionMultiModalQueryFusionModule(d_model=dim_out, input_feat_size = 768, nhead=8, dropout=0.1)
+        fusion_module = VisionMultiModalQueryFusionModule(d_model=sam2_dims[0], input_feat_size = 768, nhead=8, dropout=0.1)
         self.vision_multi_modal_fusions.append(fusion_module)
         sam2_dims.append(dim_out)
         print(sam2_dims)
