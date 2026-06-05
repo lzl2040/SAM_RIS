@@ -490,17 +490,19 @@ class Hiera(nn.Module):
         early_layer_idx = len(self.blocks) // 8
         mid_layer_idx = len(self.blocks) // 2
         last_layer_idx = len(self.blocks) - 1
+        layer_idx = 0
         for i, blk in enumerate(self.blocks):
             x = blk(x)
             # every layer
             if multi_modal_queries != None and i == early_layer_idx:
                 feats = x.permute(0, 3, 1, 2)
-                feats, _ = self.vision_multi_modal_fusions[i](tgt=feats,
+                feats, _ = self.vision_multi_modal_fusions[layer_idx](tgt=feats,
                                             memory=multi_modal_queries,
                                             memory_key_padding_mask=None,
                                             pos=None,
                                             query_pos=None)
                 x = feats.permute(0, 2, 3, 1)
+                layer_idx += 1
             if (i == self.stage_ends[-1]) or (
                 i in self.stage_ends and self.return_interm_layers
             ):
