@@ -411,6 +411,7 @@ class Hiera(nn.Module):
         # self.vision_text_fusions = nn.ModuleList()
         pre_dim = 768
         sam2_dims = []
+        embed_dims = []
         for i in range(depth):
             dim_out = embed_dim
             # lags by a block, so first block of
@@ -450,9 +451,10 @@ class Hiera(nn.Module):
 
             embed_dim = dim_out
             self.blocks.append(block)
+            embed_dims.append(embed_dim)
 
         # 最后一层
-        fusion_module = VisionMultiModalQueryFusionModule(d_model=sam2_dims[0], input_feat_size = 768, nhead=8, dropout=0.1)
+        fusion_module = VisionMultiModalQueryFusionModule(d_model=embed_dims[3], input_feat_size = 768, nhead=8, dropout=0.1)
         self.vision_multi_modal_fusions.append(fusion_module)
         sam2_dims.append(dim_out)
         print(sam2_dims)
@@ -487,8 +489,8 @@ class Hiera(nn.Module):
 
         outputs = []
         stage = 0
-        early_layer_idx = len(self.blocks) // 8
-        mid_layer_idx = len(self.blocks) // 2
+        early_layer_idx = 3
+        mid_layer_idx = len(self.blocks) // 2 - 1
         last_layer_idx = len(self.blocks) - 1
         layer_idx = 0
         for i, blk in enumerate(self.blocks):
