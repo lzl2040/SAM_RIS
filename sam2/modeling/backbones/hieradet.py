@@ -487,7 +487,7 @@ class Hiera(nn.Module):
 
         outputs = []
         stage = 0
-        early_layer_idx = len(self.blocks) // 4
+        early_layer_idx = len(self.blocks) // 8
         mid_layer_idx = len(self.blocks) // 2
         last_layer_idx = len(self.blocks) - 1
         for i, blk in enumerate(self.blocks):
