@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from segment_anything import sam_model_registry
+from segment_anything.modeling.image_encoder import add_decomposed_rel_pos
 
 
 def get_w(weights, keyword):
@@ -186,12 +187,148 @@ class SAMImageEncoderWithFusion(nn.Module):
         return self.image_encoder.neck(x.permute(0, 3, 1, 2))
 
 
+class SAMImageEncoderWithMultimodalProjection(nn.Module):
+    def __init__(
+        self,
+        image_encoder,
+        input_feat_size=768,
+        dropout=0.1,
+        return_multimodal_output=False,
+    ):
+        super().__init__()
+        self.image_encoder = image_encoder
+        self.img_size = image_encoder.img_size
+        self.return_multimodal_output = return_multimodal_output
+
+        embed_dim = image_encoder.pos_embed.shape[-1]
+        multimodal_feat_size = input_feat_size
+        multimodal_projections = []
+        for blk in image_encoder.blocks:
+            if blk.window_size == 0:
+                multimodal_projections.append(
+                    FeatureResizer(
+                        input_feat_size=multimodal_feat_size,
+                        output_feat_size=embed_dim,
+                        dropout=dropout,
+                    )
+                )
+                multimodal_feat_size = embed_dim
+            else:
+                multimodal_projections.append(nn.Identity())
+        self.multimodal_projections = nn.ModuleList(multimodal_projections)
+
+    def _get_pos_embed(self, hw):
+        pos_embed = self.image_encoder.pos_embed
+        if pos_embed is None:
+            return None
+        if pos_embed.shape[1:3] == hw:
+            return pos_embed
+        pos_embed = pos_embed.permute(0, 3, 1, 2)
+        pos_embed = F.interpolate(pos_embed, size=hw, mode="bicubic", align_corners=False)
+        return pos_embed.permute(0, 2, 3, 1)
+
+    @staticmethod
+    def _global_attention_with_multimodal_tokens(attn, image_tokens, multimodal_tokens, hw):
+        bsz, image_token_count, channels = image_tokens.shape
+        multimodal_token_count = multimodal_tokens.shape[1]
+        tokens = torch.cat([image_tokens, multimodal_tokens], dim=1)
+        num_tokens = tokens.shape[1]
+        qkv = (
+            attn.qkv(tokens)
+            .reshape(bsz, num_tokens, 3, attn.num_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        q, k, v = qkv.reshape(3, bsz * attn.num_heads, num_tokens, -1).unbind(0)
+        attn_weights = (q * attn.scale) @ k.transpose(-2, -1)
+
+        if attn.use_rel_pos:
+            image_attn = add_decomposed_rel_pos(
+                attn_weights[:, :image_token_count, :image_token_count],
+                q[:, :image_token_count, :],
+                attn.rel_pos_h,
+                attn.rel_pos_w,
+                hw,
+                hw,
+            )
+            attn_weights = attn_weights.clone()
+            attn_weights[:, :image_token_count, :image_token_count] = image_attn
+
+        attn_weights = attn_weights.softmax(dim=-1)
+        tokens = (
+            (attn_weights @ v)
+            .view(bsz, attn.num_heads, num_tokens, -1)
+            .permute(0, 2, 1, 3)
+            .reshape(bsz, num_tokens, channels)
+        )
+        tokens = attn.proj(tokens)
+        return torch.split(tokens, [image_token_count, multimodal_token_count], dim=1)
+
+    def _forward_global_block_with_multimodal_tokens(self, blk, x, multimodal_tokens):
+        bsz, height, width, channels = x.shape
+        image_token_count = height * width
+        image_tokens = x.reshape(bsz, image_token_count, channels)
+        tokens = torch.cat([image_tokens, multimodal_tokens], dim=1)
+
+        shortcut = tokens
+        tokens = blk.norm1(tokens)
+        image_tokens, multimodal_tokens = torch.split(
+            tokens,
+            [image_token_count, multimodal_tokens.shape[1]],
+            dim=1,
+        )
+        image_tokens, multimodal_tokens = self._global_attention_with_multimodal_tokens(
+            blk.attn,
+            image_tokens,
+            multimodal_tokens,
+            (height, width),
+        )
+        tokens = shortcut + torch.cat([image_tokens, multimodal_tokens], dim=1)
+        tokens = tokens + blk.mlp(blk.norm2(tokens))
+        image_tokens, multimodal_tokens = torch.split(
+            tokens,
+            [image_token_count, multimodal_tokens.shape[1]],
+            dim=1,
+        )
+        x = image_tokens.reshape(bsz, height, width, channels)
+        return x, multimodal_tokens
+
+    def forward(self, x, multi_modal_queries=None, return_multimodal_output=None):
+        x = self.image_encoder.patch_embed(x)
+        pos_embed = self._get_pos_embed(x.shape[1:3])
+        if pos_embed is not None:
+            x = x + pos_embed
+
+        multimodal_tokens = multi_modal_queries
+        for i, blk in enumerate(self.image_encoder.blocks):
+            if multimodal_tokens is None or blk.window_size > 0:
+                x = blk(x)
+                continue
+
+            multimodal_tokens = self.multimodal_projections[i](multimodal_tokens)
+            x, multimodal_tokens = self._forward_global_block_with_multimodal_tokens(
+                blk,
+                x,
+                multimodal_tokens,
+            )
+
+        image_output = self.image_encoder.neck(x.permute(0, 3, 1, 2))
+        should_return_multimodal = (
+            self.return_multimodal_output
+            if return_multimodal_output is None
+            else return_multimodal_output
+        )
+        if should_return_multimodal:
+            return image_output, multimodal_tokens
+        return image_output
+
+
 class SAM_RIS(nn.Module):
     def __init__(self, model, args, target_size=1024, device="cuda:0"):
         super().__init__()
         self.device = device
         self.sam_model = model
-        self.sam_model.image_encoder = SAMImageEncoderWithFusion(self.sam_model.image_encoder)
+        # self.sam_model.image_encoder = SAMImageEncoderWithFusion(self.sam_model.image_encoder)
+        self.sam_model.image_encoder = SAMImageEncoderWithMultimodalProjection(self.sam_model.image_encoder, dropout=0.0)
         self.blip2_qformer = load_blip2_qformer(args.blip2_path, args.blip2_vit_model)
         self.query_resizer = FeatureResizer(input_feat_size=768, output_feat_size=256, dropout=0)
         self.target_size = args.image_size
@@ -205,7 +342,7 @@ class SAM_RIS(nn.Module):
             param.requires_grad = True
 
         for name, param in self.sam_model.image_encoder.named_parameters():
-            param.requires_grad = "fusion" in name
+            param.requires_grad = "fusion" in name or "multimodal_projection" in name
 
         self.blip2_qformer.query_tokens.requires_grad_(True)
         for name, param in self.blip2_qformer.named_parameters():
