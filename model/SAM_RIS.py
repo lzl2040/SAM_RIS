@@ -327,8 +327,8 @@ class SAM_RIS(nn.Module):
         super().__init__()
         self.device = device
         self.sam_model = model
-        # self.sam_model.image_encoder = SAMImageEncoderWithFusion(self.sam_model.image_encoder)
-        self.sam_model.image_encoder = SAMImageEncoderWithMultimodalProjection(self.sam_model.image_encoder, dropout=0.0)
+        self.sam_model.image_encoder = SAMImageEncoderWithFusion(self.sam_model.image_encoder)
+        # self.sam_model.image_encoder = SAMImageEncoderWithMultimodalProjection(self.sam_model.image_encoder, dropout=0.0)
         self.blip2_qformer = load_blip2_qformer(args.blip2_path, args.blip2_vit_model)
         self.query_resizer = FeatureResizer(input_feat_size=768, output_feat_size=256, dropout=0)
         self.target_size = args.image_size

@@ -6,16 +6,16 @@ export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
 unset NCCL_DEBUG
 torchrun --nproc_per_node=8 \
   train_with_val_sam_ris.py \
-  --sam_model_type vit_h \
-  --sam_pretrain_path /mnt/lizuolei/gxy/checkpoints/Pretrain/sam_vit_h_4b8939.pth \
+  --sam_model_type vit_b \
+  --sam_pretrain_path /mnt/lizuolei/gxy/checkpoints/Pretrain/sam_vit_b_01ec64.pth \
   --refer_data_root /mnt/lizuolei/gxy/Data/coco \
   --num_epochs 40 \
   --batch_size 18 \
   --image_size 480 \
   --dataset all \
   --print_interval 40 \
-  --task_name 0606_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_1e-4_train_full_val_refcoco_val_ab_sam_huge_dit_sam_style \
-  --lr 1e-4 \
+  --task_name 0612_MM_SAM_img_size_480_large_full_8gpu_bs_144_lr_5e-5_train_full_val_refcoco_val_ab_sam_base \
+  --lr 5e-5 \
   --grad_clip_norm 1.0 \
   --logit_clip_value 32.0 \
   --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \
