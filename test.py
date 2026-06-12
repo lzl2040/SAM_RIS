@@ -9,6 +9,10 @@ from timm.utils import AverageMeter
 from PIL import Image
 from torch.nn import functional as F
 import cv2
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import re
 from model.SAM2_RIS import SAM2_RIS
 # from model.SAM2_RIS_WO_BLIP2 import SAM2_RIS_WO_BLIP2 as SAM2_RIS
 from sam2.build_sam import build_sam2
@@ -39,6 +43,190 @@ def overlay_mask_on_image(raw_img, mask, color=(255, 0, 0), alpha=0.5):
     blended = cv2.addWeighted(raw_img, 1.0, color_mask, alpha, 0)
     return blended
 
+def _set_encoder_focus_cache(model, enabled):
+    trunk = getattr(getattr(model.sam2_model, "image_encoder", None), "trunk", None)
+    if trunk is None or not hasattr(trunk, "cache_fusion_features"):
+        return False
+    trunk.cache_fusion_features = enabled
+    if not enabled and hasattr(trunk, "fusion_feature_cache"):
+        trunk.fusion_feature_cache = []
+    return True
+
+def _get_encoder_focus_cache(model):
+    trunk = getattr(getattr(model.sam2_model, "image_encoder", None), "trunk", None)
+    if trunk is None:
+        return []
+    return getattr(trunk, "fusion_feature_cache", [])
+
+def _configure_encoder_focus_attention(model, args):
+    trunk = getattr(getattr(model.sam2_model, "image_encoder", None), "trunk", None)
+    if trunk is None:
+        return
+    if hasattr(trunk, "encoder_focus_attn_reduce"):
+        trunk.encoder_focus_attn_reduce = args.encoder_focus_attn_reduce
+    if hasattr(trunk, "encoder_focus_query_idx"):
+        trunk.encoder_focus_query_idx = args.encoder_focus_query_idx
+    if hasattr(trunk, "encoder_focus_topk"):
+        trunk.encoder_focus_topk = args.encoder_focus_topk
+
+def _safe_name(text, max_len=80):
+    text = re.sub(r"[^a-zA-Z0-9_.-]+", "_", text.strip())
+    return text[:max_len].strip("_") or "caption"
+
+def _raw_image_to_numpy(raw_img):
+    if torch.is_tensor(raw_img):
+        raw_img = raw_img.detach().cpu()
+        if raw_img.ndim == 4:
+            raw_img = raw_img[0]
+        raw_img = raw_img.numpy()
+    if raw_img.ndim == 3 and raw_img.shape[0] in (1, 3):
+        raw_img = np.transpose(raw_img, (1, 2, 0))
+    raw_img = np.asarray(raw_img)
+    if raw_img.dtype != np.uint8:
+        raw_img = np.clip(raw_img, 0, 255).astype(np.uint8)
+    if raw_img.ndim == 2:
+        raw_img = np.repeat(raw_img[:, :, None], 3, axis=2)
+    return raw_img[:, :, :3]
+
+def _mask_to_numpy(mask, out_hw):
+    if torch.is_tensor(mask):
+        mask = mask.detach().cpu().numpy()
+    mask = np.asarray(mask)
+    mask = np.squeeze(mask)
+    if mask.ndim != 2:
+        mask = mask.reshape(mask.shape[-2], mask.shape[-1])
+    mask = (mask > 0).astype(np.uint8)
+    if mask.shape != out_hw:
+        mask = cv2.resize(mask, (out_hw[1], out_hw[0]), interpolation=cv2.INTER_NEAREST)
+    return mask
+
+def _attention_heatmap(attention, out_hw):
+    # attention: B,T,H,W. Average frames if T exists, then upsample to raw image size.
+    heat = attention[0].mean(dim=0, keepdim=True).unsqueeze(0)
+    heat = F.interpolate(heat, size=out_hw, mode="bilinear", align_corners=False)[0, 0]
+    return heat.numpy()
+
+def _normalize_heatmap(heat, low, high, keep_percent):
+    heat = (heat - low) / max(high - low, 1e-6)
+    heat = np.clip(heat, 0, 1)
+    if keep_percent < 100:
+        threshold = np.percentile(heat, 100 - keep_percent)
+        heat = np.where(heat >= threshold, heat, 0)
+    return np.clip(heat, 0, 1)
+
+def _softmax_heatmap(heat, temperature):
+    flat = heat.reshape(-1).astype(np.float64)
+    temperature = max(float(temperature), 1e-6)
+    flat = flat - np.max(flat)
+    prob = np.exp(flat / temperature)
+    prob = prob / max(np.sum(prob), 1e-12)
+    return prob.reshape(heat.shape).astype(np.float32)
+
+def _keep_max_connected_component(heat):
+    mask = (heat > 0).astype(np.uint8)
+    if mask.max() == 0:
+        return heat
+    max_y, max_x = np.unravel_index(np.argmax(heat), heat.shape)
+    num_labels, labels = cv2.connectedComponents(mask, connectivity=8)
+    if num_labels <= 1:
+        return heat
+    max_label = labels[max_y, max_x]
+    if max_label == 0:
+        return heat
+    return np.where(labels == max_label, heat, 0)
+
+def _postprocess_attention_heatmap(attn_map, keep_percent, postprocess, softmax_temp):
+    if postprocess in ("softmax", "softmax_max_cc"):
+        attn_map = _softmax_heatmap(attn_map, softmax_temp)
+    low, high = np.percentile(attn_map, 1), np.percentile(attn_map, 99)
+    attn_heat = _normalize_heatmap(attn_map, low, high, keep_percent)
+    if postprocess in ("max_cc", "softmax_max_cc"):
+        attn_heat = _keep_max_connected_component(attn_heat)
+    return attn_heat
+
+def _overlay_heatmap(raw_rgb, heat, alpha=0.45):
+    if np.max(heat) <= 0:
+        return raw_rgb.copy()
+    color_rgb = plt.get_cmap("jet")(heat)[:, :, :3]
+    color_rgb = (color_rgb * 255).astype(np.uint8)
+    mask = heat[:, :, None] > 0
+    blended = cv2.addWeighted(raw_rgb, 1.0 - alpha, color_rgb, alpha, 0)
+    overlay = np.where(mask, blended, raw_rgb)
+    return overlay
+
+def save_encoder_focus_visuals(
+    model,
+    raw_img,
+    gt_mask,
+    caption,
+    save_root,
+    sample_idx,
+    keep_percent=15.0,
+    heatmap_postprocess="softmax_max_cc",
+    softmax_temp=0.03,
+):
+    cache = _get_encoder_focus_cache(model)
+    if len(cache) == 0:
+        return False
+    keep_percent = float(np.clip(keep_percent, 1.0, 100.0))
+
+    raw_rgb = _raw_image_to_numpy(raw_img)
+    out_hw = raw_rgb.shape[:2]
+    folder = os.path.join(save_root, f"{sample_idx:04d}_{_safe_name(caption)}")
+    os.makedirs(folder, exist_ok=True)
+    Image.fromarray(raw_rgb).save(os.path.join(folder, "image.png"))
+    gt_mask = _mask_to_numpy(gt_mask, out_hw)
+    Image.fromarray(gt_mask * 255).save(os.path.join(folder, "gt_mask.png"))
+    gt_overlay = overlay_mask_on_image(raw_rgb, gt_mask, color=(0, 255, 0), alpha=0.45)
+    Image.fromarray(gt_overlay).save(os.path.join(folder, "gt_overlay.png"))
+    with open(os.path.join(folder, "caption.txt"), "w") as f:
+        f.write(str(caption) + "\n")
+
+    grid_cols = 2 + len(cache)
+    fig, axes = plt.subplots(1, grid_cols, figsize=(3 * grid_cols, 3))
+    if grid_cols == 1:
+        axes = [axes]
+    axes[0].imshow(raw_rgb)
+    axes[0].set_title("Image")
+    axes[0].axis("off")
+    axes[1].imshow(gt_overlay)
+    axes[1].set_title("GT")
+    axes[1].axis("off")
+
+    col = 2
+    for item in cache:
+        stage = item["stage"]
+        attn_reduce = item.get("attn_reduce", "max")
+        query_idx = item.get("query_idx", 0)
+        topk = item.get("topk", 3)
+        reduce_label = attn_reduce
+        if attn_reduce == "query":
+            reduce_label = f"query_{query_idx}"
+        elif attn_reduce == "topk_mean":
+            reduce_label = f"top{topk}_mean"
+        attn_map = _attention_heatmap(item["attention"], out_hw)
+        attn_heat = _postprocess_attention_heatmap(
+            attn_map,
+            keep_percent=keep_percent,
+            postprocess=heatmap_postprocess,
+            softmax_temp=softmax_temp,
+        )
+        attn_overlay = _overlay_heatmap(raw_rgb, attn_heat)
+
+        Image.fromarray(attn_overlay).save(
+            os.path.join(folder, f"stage_{stage}_{reduce_label}_{heatmap_postprocess}_cross_attention.png")
+        )
+
+        axes[col].imshow(attn_overlay)
+        axes[col].set_title(f"S{stage} {reduce_label}")
+        axes[col].axis("off")
+        col += 1
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(folder, "encoder_focus_grid.png"), dpi=200)
+    plt.close(fig)
+    return True
+
 def get_transform(args):
     transforms = [T.Resize(args.image_size, args.image_size),
                       T.ToTensor(),
@@ -63,7 +251,7 @@ def get_dataset(image_set, image_transforms, target_transforms, cnn_transforms, 
                       )
     return ds
 
-def test_model(model, data_loader, device, logger, save_path):
+def test_model(model, data_loader, device, logger, save_path, args):
     cum_I, cum_U = 0, 0
     eval_seg_iou_list = [.5, .6, .7, .8, .9]
     seg_correct = np.zeros(len(eval_seg_iou_list), dtype=np.int32)
@@ -73,7 +261,15 @@ def test_model(model, data_loader, device, logger, save_path):
     iterations = 0
     pred_iou = 0
     miou_avg = AverageMeter()
+    encoder_focus_saved = 0
+    encoder_focus_root = args.encoder_focus_dir or os.path.join(save_path, "encoder_focus")
+    if args.visualize_encoder_focus:
+        os.makedirs(encoder_focus_root, exist_ok=True)
+        if not _set_encoder_focus_cache(model, False):
+            logger.info("Visual encoder focus cache is unavailable for this model.")
+        _configure_encoder_focus_attention(model, args)
     with torch.no_grad():
+        total_num = 0
         for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(data_loader)):
             imgs, target, blip2_imgs = imgs.to(device), target.to(device), blip2_imgs.to(device)
             cnn_imgs = cnn_imgs.to(device)
@@ -82,8 +278,29 @@ def test_model(model, data_loader, device, logger, save_path):
             org_mask = info["raw_masks"].unsqueeze(0)
             org_img = info["raw_imgs"]
             for obj_cap in captions:
+                total_num += 1
+                save_encoder_focus = (
+                    total_num % 5 == 0
+                    and args.visualize_encoder_focus
+                    # and encoder_focus_saved < args.encoder_focus_samples
+                )
+                _set_encoder_focus_cache(model, save_encoder_focus)
                 pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs,
                                                                                          target, obj_cap, step, 0, multi_mask=False)
+                if save_encoder_focus:
+                    if save_encoder_focus_visuals(
+                        model,
+                        org_img,
+                        org_mask,
+                        obj_cap,
+                        encoder_focus_root,
+                        encoder_focus_saved,
+                        keep_percent=args.encoder_focus_keep_percent,
+                        heatmap_postprocess=args.encoder_focus_heatmap_postprocess,
+                        softmax_temp=args.encoder_focus_softmax_temp,
+                    ):
+                        encoder_focus_saved += 1
+                    _set_encoder_focus_cache(model, False)
                 # ---------------- from referSAM ----------------------#
                 # low_res_masks = torch.where(low_pred_logits > 0.0, 1.0, 0.0)
                 # # print(low_res_masks.shape, iou_predictions.shape) # if multi_mask=True, torch.Size([1, 3, 256, 256]) torch.Size([1, 3])
@@ -209,7 +426,7 @@ def main():
             sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
     sam_ris_model.eval()
     os.makedirs(args.pred_save_dir, exist_ok=True)
-    test_model(sam_ris_model, data_loader_test, device, logger, save_path = args.pred_save_dir)
+    test_model(sam_ris_model, data_loader_test, device, logger, save_path = args.pred_save_dir, args=args)
 
 
 

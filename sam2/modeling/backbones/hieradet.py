@@ -152,7 +152,11 @@ class VisionMultiModalQueryFusionModule(nn.Module):
     def forward(self, tgt, memory,
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
-                query_pos: Optional[Tensor] = None):
+                query_pos: Optional[Tensor] = None,
+                return_attention: bool = False,
+                attn_reduce: str = "max",
+                attn_query_idx: int = 0,
+                attn_topk: int = 3):
         # print(memory.shape)
         memory = self.multi_modal_resizer(memory) # B L C
         # print(memory.shape)
@@ -167,14 +171,34 @@ class VisionMultiModalQueryFusionModule(nn.Module):
         H, W = tgt.shape[2:4]
         tgt = rearrange(tgt, "(b t) c h w -> (t h w) b c", b=B, t=T)
         memory = rearrange(memory, "l (b t) c -> (l t) b c", b=B, t=T)
-        query2img_tgt, _ = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
+        query2img_tgt, img_to_query_attn = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
                                    key=self.with_pos_embed(memory, pos),
                                    value=memory, attn_mask=None,
-                                   key_padding_mask=memory_key_padding_mask)
+                                   key_padding_mask=memory_key_padding_mask,
+                                   need_weights=return_attention,
+                                   average_attn_weights=True)
         q2i_tgt = tgt + (self.res_gate(query2img_tgt) * query2img_tgt)
         # q2i_tgt = tgt + query2img_tgt
         q2i_tgt = rearrange(q2i_tgt, "(t h w) b c -> (b t) c h w", t=T, h = H, w = W)
         i2q_tgt = None
+        attn_map = None
+        if return_attention and img_to_query_attn is not None:
+            # print(img_to_query_attn.shape) # 1 N 32
+            # Real fusion attention from the call above:
+            # each image token attends to multimodal query tokens.
+            if attn_reduce == "mean":
+                img_attn = img_to_query_attn.mean(dim=-1)
+            elif attn_reduce == "sum":
+                img_attn = img_to_query_attn.sum(dim=-1)
+            elif attn_reduce == "query":
+                query_idx = max(0, min(attn_query_idx, img_to_query_attn.shape[-1] - 1))
+                img_attn = img_to_query_attn[..., query_idx]
+            elif attn_reduce == "topk_mean":
+                topk = max(1, min(attn_topk, img_to_query_attn.shape[-1]))
+                img_attn = img_to_query_attn.topk(k=topk, dim=-1).values.mean(dim=-1)
+            else:
+                img_attn = img_to_query_attn.max(dim=-1).values
+            attn_map = rearrange(img_attn, "b (t h w) -> b t h w", t=T, h=H, w=W)
         ###************************###
         # query2img_tgt, _ = self.query2img(query=self.with_pos_embed(tgt, query_pos),
         #                            key=self.with_pos_embed(memory, pos),
@@ -192,7 +216,7 @@ class VisionMultiModalQueryFusionModule(nn.Module):
         # i2q_tgt = memory + (self.res_gate_query(img2query_tgt) * img2query_tgt)
         # i2q_tgt = rearrange(i2q_tgt, "(l t) b c -> (b t) l c", t=T)
         ###************************###
-        return q2i_tgt, i2q_tgt
+        return q2i_tgt, i2q_tgt, attn_map
 
 def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.Tensor:
     if pool is None:
@@ -407,6 +431,11 @@ class Hiera(nn.Module):
         cur_stage = 1
         self.blocks = nn.ModuleList()
         self.vision_multi_modal_fusions = nn.ModuleList()
+        self.cache_fusion_features = False
+        self.fusion_feature_cache = []
+        self.encoder_focus_attn_reduce = "max"
+        self.encoder_focus_query_idx = 0
+        self.encoder_focus_topk = 3
 
         # self.vision_text_fusions = nn.ModuleList()
         pre_dim = 768
@@ -481,6 +510,9 @@ class Hiera(nn.Module):
 
 
     def forward(self, x: torch.Tensor, multi_modal_queries = None, cnn_tokens = None) -> List[torch.Tensor]:
+        if self.cache_fusion_features:
+            self.fusion_feature_cache = []
+
         x = self.patch_embed(x)
         # x: (B, H, W, C)
 
@@ -517,11 +549,26 @@ class Hiera(nn.Module):
                 # if stage > 1:
                 # 进行融合 multi-modal
                 if multi_modal_queries != None:
-                    feats, _ = self.vision_multi_modal_fusions[stage](tgt=feats,
+                    # print("fuse")
+                    feats, _, attn_map = self.vision_multi_modal_fusions[stage](tgt=feats,
                                              memory=multi_modal_queries,
                                              memory_key_padding_mask=None,
                                              pos=None,
-                                             query_pos=None)
+                                             query_pos=None,
+                                             return_attention=self.cache_fusion_features,
+                                             attn_reduce=self.encoder_focus_attn_reduce,
+                                             attn_query_idx=self.encoder_focus_query_idx,
+                                             attn_topk=self.encoder_focus_topk)
+                    if self.cache_fusion_features and attn_map is not None:
+                        self.fusion_feature_cache.append(
+                            {
+                                "stage": stage,
+                                "attention": attn_map.detach().float().cpu(),
+                                "attn_reduce": self.encoder_focus_attn_reduce,
+                                "query_idx": self.encoder_focus_query_idx,
+                                "topk": self.encoder_focus_topk,
+                            }
+                        )
                     outputs.append(feats)
                     stage += 1
                     # 这一步显存要求很大
