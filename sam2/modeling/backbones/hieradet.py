@@ -177,8 +177,27 @@ class VisionMultiModalQueryFusionModule(nn.Module):
                                    key_padding_mask=memory_key_padding_mask,
                                    need_weights=return_attention,
                                    average_attn_weights=True)
-        q2i_tgt = tgt + (self.res_gate(query2img_tgt) * query2img_tgt)
+        gate = self.res_gate(query2img_tgt)
+        gated_update = gate * query2img_tgt
+        q2i_tgt = tgt + gated_update
         # q2i_tgt = tgt + query2img_tgt
+        self.last_gate_cache = None
+        if return_attention:
+            with torch.no_grad():
+                gate_detached = gate.detach().float()
+                update_detached = gated_update.detach().float()
+                injected_detached = query2img_tgt.detach().float()
+                self.last_gate_cache = {
+                    "gate": gate_detached.cpu(),
+                    "gate_abs_spatial": rearrange(
+                        gate_detached.abs().mean(dim=-1), "(t h w) b -> b t h w", t=T, h=H, w=W
+                    ).cpu(),
+                    "gate_signed_spatial": rearrange(
+                        gate_detached.mean(dim=-1), "(t h w) b -> b t h w", t=T, h=H, w=W
+                    ).cpu(),
+                    "update_norm": update_detached.norm().cpu(),
+                    "injected_norm": injected_detached.norm().cpu(),
+                }
         q2i_tgt = rearrange(q2i_tgt, "(t h w) b c -> (b t) c h w", t=T, h = H, w = W)
         i2q_tgt = None
         attn_map = None
@@ -560,10 +579,12 @@ class Hiera(nn.Module):
                                              attn_query_idx=self.encoder_focus_query_idx,
                                              attn_topk=self.encoder_focus_topk)
                     if self.cache_fusion_features and attn_map is not None:
+                        gate_cache = getattr(self.vision_multi_modal_fusions[stage], "last_gate_cache", None)
                         self.fusion_feature_cache.append(
                             {
                                 "stage": stage,
                                 "attention": attn_map.detach().float().cpu(),
+                                "gate": gate_cache,
                                 "attn_reduce": self.encoder_focus_attn_reduce,
                                 "query_idx": self.encoder_focus_query_idx,
                                 "topk": self.encoder_focus_topk,

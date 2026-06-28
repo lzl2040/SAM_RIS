@@ -3,6 +3,12 @@ download huggingface token:
 ```shell
 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
 ```
+
+## qformer笔记
+输入给qformer的是[query + text_tokens]的拼接，它们作为输入，图像特征会作为encoder_hidden_states，类似于kv
+
+在每一层，[query + text_tokens]先进行self-attention，然后输出的query单独拿出来，跟图像特征进行cross-attention
+
 ## Run
 batch size=16,
 - img_size=1024: 60G
@@ -17,7 +23,7 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 train.py --model_cfg sam2.1_h
 ```
 ### Test
 ```shell
-python test.py --model_cfg sam2.1_hiera_b+.yaml --device 0 --split val --dataset refcocog --image_size 480 --splitBy umd
+python test.py --model_cfg sam2.1_hiera_l.yaml --device 0 --split val --dataset refcoco --image_size 480 --splitBy unc --refer_data_root /data/Data/coco
 ```
 
 ## Error

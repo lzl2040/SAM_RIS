@@ -154,6 +154,192 @@ def _overlay_heatmap(raw_rgb, heat, alpha=0.45):
     overlay = np.where(mask, blended, raw_rgb)
     return overlay
 
+def _overlay_signed_heatmap(raw_rgb, signed_heat, alpha=0.45, cmap="seismic"):
+    signed_heat = np.clip(signed_heat, -1, 1)
+    color_rgb = plt.get_cmap(cmap)((signed_heat + 1) / 2.0)[:, :, :3]
+    color_rgb = (color_rgb * 255).astype(np.uint8)
+    strength = np.abs(signed_heat)[:, :, None]
+    blended = cv2.addWeighted(raw_rgb, 1.0 - alpha, color_rgb, alpha, 0)
+    overlay = np.where(strength > 1e-6, blended, raw_rgb)
+    return overlay
+
+def _normalize_signed_heatmap(heat):
+    bound = np.percentile(np.abs(heat), 99)
+    bound = max(float(bound), 1e-6)
+    return np.clip(heat / bound, -1, 1)
+
+def _tensor_quantiles(x, qs=(0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99)):
+    return torch.quantile(x, torch.tensor(qs, device=x.device, dtype=x.dtype)).detach().cpu().numpy()
+
+def _summarize_gate_tensor(gate, update_norm=None, injected_norm=None):
+    gate = gate.detach().float().cpu().reshape(-1)
+    abs_gate = gate.abs()
+    q01, q05, q25, q50, q75, q95, q99 = _tensor_quantiles(gate)
+    abs_q01, abs_q05, abs_q25, abs_q50, abs_q75, abs_q95, abs_q99 = _tensor_quantiles(abs_gate)
+    injected_norm_value = float(injected_norm) if injected_norm is not None else 0.0
+    update_ratio = 0.0
+    if injected_norm_value > 1e-12 and update_norm is not None:
+        update_ratio = float(update_norm) / injected_norm_value
+    return {
+        "count": int(gate.numel()),
+        "mean": float(gate.mean()),
+        "std": float(gate.std(unbiased=False)),
+        "min": float(gate.min()),
+        "q01": float(q01),
+        "q05": float(q05),
+        "q25": float(q25),
+        "median": float(q50),
+        "q75": float(q75),
+        "q95": float(q95),
+        "q99": float(q99),
+        "max": float(gate.max()),
+        "abs_mean": float(abs_gate.mean()),
+        "abs_q01": float(abs_q01),
+        "abs_q05": float(abs_q05),
+        "abs_q25": float(abs_q25),
+        "abs_median": float(abs_q50),
+        "abs_q75": float(abs_q75),
+        "abs_q95": float(abs_q95),
+        "abs_q99": float(abs_q99),
+        "near_zero_005": float((abs_gate < 0.05).float().mean()),
+        "near_zero_010": float((abs_gate < 0.10).float().mean()),
+        "positive_ratio": float((gate > 0).float().mean()),
+        "negative_ratio": float((gate < 0).float().mean()),
+        "update_to_injected_norm": update_ratio,
+    }
+
+def _add_gate_records(gate_records, cache, sample_idx, caption):
+    for item in cache:
+        gate_cache = item.get("gate")
+        if gate_cache is None:
+            continue
+        gate = gate_cache["gate"]
+        row = _summarize_gate_tensor(
+            gate,
+            update_norm=gate_cache.get("update_norm"),
+            injected_norm=gate_cache.get("injected_norm"),
+        )
+        row["sample_idx"] = sample_idx
+        row["stage"] = item["stage"]
+        row["caption"] = str(caption)
+        gate_records.append(row)
+
+def _write_gate_csv(rows, save_path):
+    if len(rows) == 0:
+        return
+    keys = [
+        "sample_idx", "stage", "caption", "count", "mean", "std", "min", "q01", "q05", "q25",
+        "median", "q75", "q95", "q99", "max", "abs_mean", "abs_q01", "abs_q05", "abs_q25",
+        "abs_median", "abs_q75", "abs_q95", "abs_q99", "near_zero_005", "near_zero_010",
+        "positive_ratio", "negative_ratio", "update_to_injected_norm"
+    ]
+    with open(save_path, "w") as f:
+        f.write(",".join(keys) + "\n")
+        for row in rows:
+            values = []
+            for key in keys:
+                value = row.get(key, "")
+                if isinstance(value, str):
+                    value = '"' + value.replace('"', '""') + '"'
+                values.append(str(value))
+            f.write(",".join(values) + "\n")
+
+def _save_gate_summary_plots(rows, save_root):
+    if len(rows) == 0:
+        return
+    os.makedirs(save_root, exist_ok=True)
+    _write_gate_csv(rows, os.path.join(save_root, "gate_statistics_per_sample_stage.csv"))
+
+    stages = sorted(set(row["stage"] for row in rows))
+    summary_path = os.path.join(save_root, "gate_statistics_by_stage.csv")
+    metric_keys = ["mean", "abs_mean", "near_zero_005", "near_zero_010", "update_to_injected_norm", "q05", "median", "q95"]
+    with open(summary_path, "w") as f:
+        f.write("stage," + ",".join(metric_keys) + "\n")
+        for stage in stages:
+            stage_rows = [row for row in rows if row["stage"] == stage]
+            vals = {key: np.mean([row[key] for row in stage_rows]) for key in metric_keys}
+            f.write(str(stage) + "," + ",".join(f"{vals[key]:.6f}" for key in metric_keys) + "\n")
+
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.5))
+    for stage in stages:
+        stage_rows = [row for row in rows if row["stage"] == stage]
+        axes[0].hist([row["mean"] for row in stage_rows], bins=20, alpha=0.55, label=f"S{stage}")
+        axes[1].hist([row["abs_mean"] for row in stage_rows], bins=20, alpha=0.55, label=f"S{stage}")
+        axes[2].hist([row["update_to_injected_norm"] for row in stage_rows], bins=20, alpha=0.55, label=f"S{stage}")
+    axes[0].set_title("Gate mean")
+    axes[1].set_title("|Gate| mean")
+    axes[2].set_title("||g*x|| / ||x||")
+    for ax in axes:
+        ax.grid(alpha=0.25)
+        ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_root, "gate_distribution_summary.png"), dpi=220)
+    plt.close(fig)
+
+def save_gate_visuals(model, raw_img, caption, save_root, sample_idx):
+    cache = _get_encoder_focus_cache(model)
+    gate_items = [item for item in cache if item.get("gate") is not None]
+    if len(gate_items) == 0:
+        return False
+    raw_rgb = _raw_image_to_numpy(raw_img)
+    out_hw = raw_rgb.shape[:2]
+    folder = os.path.join(save_root, f"{sample_idx:04d}_{_safe_name(caption)}")
+    os.makedirs(folder, exist_ok=True)
+
+    cols = 1 + len(gate_items)
+    fig_abs, axes_abs = plt.subplots(1, cols, figsize=(3 * cols, 3))
+    fig_signed, axes_signed = plt.subplots(1, cols, figsize=(3 * cols, 3))
+    fig_signed_rev, axes_signed_rev = plt.subplots(1, cols, figsize=(3 * cols, 3))
+    if cols == 1:
+        axes_abs = [axes_abs]
+        axes_signed = [axes_signed]
+        axes_signed_rev = [axes_signed_rev]
+    axes_abs[0].imshow(raw_rgb)
+    axes_abs[0].set_title("Image")
+    axes_abs[0].axis("off")
+    axes_signed[0].imshow(raw_rgb)
+    axes_signed[0].set_title("Image")
+    axes_signed[0].axis("off")
+    axes_signed_rev[0].imshow(raw_rgb)
+    axes_signed_rev[0].set_title("Image")
+    axes_signed_rev[0].axis("off")
+    for col, item in enumerate(gate_items, start=1):
+        stage = item["stage"]
+        gate_map = item["gate"]["gate_abs_spatial"][0].mean(dim=0, keepdim=True).unsqueeze(0)
+        gate_map = F.interpolate(gate_map, size=out_hw, mode="bilinear", align_corners=False)[0, 0].numpy()
+        low, high = np.percentile(gate_map, 1), np.percentile(gate_map, 99)
+        gate_heat = _normalize_heatmap(gate_map, low, high, keep_percent=100)
+        gate_overlay = _overlay_heatmap(raw_rgb, gate_heat, alpha=0.45)
+        Image.fromarray(gate_overlay).save(os.path.join(folder, f"stage_{stage}_gate_abs_mean.png"))
+        axes_abs[col].imshow(gate_overlay)
+        axes_abs[col].set_title(f"S{stage} |gate|")
+        axes_abs[col].axis("off")
+
+        signed_map = item["gate"]["gate_signed_spatial"][0].mean(dim=0, keepdim=True).unsqueeze(0)
+        signed_map = F.interpolate(signed_map, size=out_hw, mode="bilinear", align_corners=False)[0, 0].numpy()
+        signed_heat = _normalize_signed_heatmap(signed_map)
+        signed_overlay = _overlay_signed_heatmap(raw_rgb, signed_heat, alpha=0.45)
+        Image.fromarray(signed_overlay).save(os.path.join(folder, f"stage_{stage}_gate_signed_mean.png"))
+        axes_signed[col].imshow(signed_overlay)
+        axes_signed[col].set_title(f"S{stage} signed")
+        axes_signed[col].axis("off")
+
+        signed_rev_overlay = _overlay_signed_heatmap(raw_rgb, signed_heat, alpha=0.45, cmap="seismic_r")
+        Image.fromarray(signed_rev_overlay).save(os.path.join(folder, f"stage_{stage}_gate_signed_mean_reversed.png"))
+        axes_signed_rev[col].imshow(signed_rev_overlay)
+        axes_signed_rev[col].set_title(f"S{stage} signed-r")
+        axes_signed_rev[col].axis("off")
+    fig_abs.tight_layout()
+    fig_abs.savefig(os.path.join(folder, "gate_abs_mean_grid.png"), dpi=200)
+    plt.close(fig_abs)
+    fig_signed.tight_layout()
+    fig_signed.savefig(os.path.join(folder, "gate_signed_mean_grid.png"), dpi=200)
+    plt.close(fig_signed)
+    fig_signed_rev.tight_layout()
+    fig_signed_rev.savefig(os.path.join(folder, "gate_signed_mean_reversed_grid.png"), dpi=200)
+    plt.close(fig_signed_rev)
+    return True
+
 def save_encoder_focus_visuals(
     model,
     raw_img,
@@ -262,11 +448,16 @@ def test_model(model, data_loader, device, logger, save_path, args):
     pred_iou = 0
     miou_avg = AverageMeter()
     encoder_focus_saved = 0
+    gate_visual_saved = 0
+    gate_stats_saved = 0
+    gate_records = []
     encoder_focus_root = args.encoder_focus_dir or os.path.join(save_path, "encoder_focus")
-    if args.visualize_encoder_focus:
+    gate_stats_root = args.gate_stats_dir or os.path.join(save_path, "gate_stats")
+    if args.visualize_encoder_focus or args.visualize_gate_stats:
         os.makedirs(encoder_focus_root, exist_ok=True)
+        os.makedirs(gate_stats_root, exist_ok=True)
         if not _set_encoder_focus_cache(model, False):
-            logger.info("Visual encoder focus cache is unavailable for this model.")
+            logger.info("Fusion cache is unavailable for this model.")
         _configure_encoder_focus_attention(model, args)
     with torch.no_grad():
         total_num = 0
@@ -284,9 +475,15 @@ def test_model(model, data_loader, device, logger, save_path, args):
                     and args.visualize_encoder_focus
                     # and encoder_focus_saved < args.encoder_focus_samples
                 )
-                _set_encoder_focus_cache(model, save_encoder_focus)
-                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs,
-                                                                                         target, obj_cap, step, 0, multi_mask=False)
+                save_gate_stats = (
+                    total_num % args.gate_stats_interval == 0
+                    and args.visualize_gate_stats
+                    # and gate_stats_saved < args.gate_stats_samples
+                )
+                _set_encoder_focus_cache(model, save_encoder_focus or save_gate_stats)
+                pred_logits, low_pred_logits, query_embeds, object_score_logits, iou_predictions = model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs, target, obj_cap, step, 0, multi_mask=False)
+                # save_encoder_focus = False
+                # save_gate_stats = False
                 if save_encoder_focus:
                     if save_encoder_focus_visuals(
                         model,
@@ -300,6 +497,20 @@ def test_model(model, data_loader, device, logger, save_path, args):
                         softmax_temp=args.encoder_focus_softmax_temp,
                     ):
                         encoder_focus_saved += 1
+                    _set_encoder_focus_cache(model, False)
+                if save_gate_stats:
+                    cache = _get_encoder_focus_cache(model)
+                    _add_gate_records(gate_records, cache, total_num, obj_cap)
+                    gate_stats_saved += 1
+                    # print(save_gate_stats, gate_stats_saved)
+                    if (args.gate_visual_samples <= 0 or gate_visual_saved < args.gate_visual_samples) and save_gate_visuals(
+                        model,
+                        org_img,
+                        obj_cap,
+                        gate_stats_root,
+                        gate_visual_saved,
+                    ):
+                        gate_visual_saved += 1
                     _set_encoder_focus_cache(model, False)
                 # ---------------- from referSAM ----------------------#
                 # low_res_masks = torch.where(low_pred_logits > 0.0, 1.0, 0.0)
@@ -332,38 +543,43 @@ def test_model(model, data_loader, device, logger, save_path, args):
                 mean_IoU.append(this_iou)
 
                 # ---------------- visualize ----------------------#
+                # if this_iou > 0:
+                raw_img = org_img.detach().cpu().numpy()[0]
+                masks = np.array(target_[0] > 0).astype(np.uint8)
+                # 高置信区域
+                sam2_pred = pred_masks[0]
+                image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
+                image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
 
-                # raw_img = org_img.detach().cpu().numpy()[0]
-                # masks = np.array(target_[0] > 0).astype(np.uint8)
-                # # 高置信区域
-                # sam2_pred = pred_masks[0]
-                # image_bgr = raw_img[:, :, ::-1].astype(np.uint8)
-                # image_with_contours = draw_contours(image_bgr, sam2_pred[0], masks[0])
+                # 将绘制了轮廓的图像转换回RGB格式
+                image_with_contours_rgb = image_with_contours[:, :, ::-1]
+                # print(image_with_contours_rgb.shape)
 
-                # # 将绘制了轮廓的图像转换回RGB格式
-                # image_with_contours_rgb = image_with_contours[:, :, ::-1]
-                # # print(image_with_contours_rgb.shape)
+                # 创建 PIL 图像对象
+                img_with_contours = Image.fromarray(image_with_contours_rgb)
 
-                # # 创建 PIL 图像对象
-                # img_with_contours = Image.fromarray(image_with_contours_rgb)
+                # 保存图像
+                folder_name = obj_cap.replace(" ", "_")
+                img_save_path = os.path.join(save_path, f"{seg_total}_{folder_name}")
+                os.makedirs(img_save_path, exist_ok=True)
+                with open(os.path.join(img_save_path, "caption.txt"), "r") as f:
+                    res_txt = f.read().strip()
+                model_1_iou = float(res_txt.split("IoU:")[-1])
 
-                # # 保存图像
-                # folder_name = obj_cap.replace(" ", "_")
-                # img_save_path = os.path.join(save_path, f"{folder_name}_{seg_total}")
-                # os.makedirs(img_save_path, exist_ok=True)
-                # raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
-                # raw_img_pil.save(f"{img_save_path}/image.png")
-                # # logger.info(f"Num: {seg_total}")
+                raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+                raw_img_pil.save(f"{img_save_path}/image.png")
+                # logger.info(f"Num: {seg_total}")
 
-                # gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
-                # gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
-                # gt_pil.save(f"{img_save_path}/gt.png")
-                # pred_img = overlay_mask_on_image(image_bgr.copy(), sam2_pred[0], color=(255, 0, 0))  # red for prediction
-                # pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
-                # pred_pil.save(f"{img_save_path}/pred.png")
+                gt_img = overlay_mask_on_image(image_bgr.copy(), masks[0], color=(0, 255, 0))
+                gt_pil = Image.fromarray(cv2.cvtColor(gt_img, cv2.COLOR_BGR2RGB))
+                gt_pil.save(f"{img_save_path}/gt.png")
+                if this_iou < model_1_iou:
+                    pred_img = overlay_mask_on_image(image_bgr.copy(), sam2_pred[0], color=(255, 0, 0))  # red for prediction
+                    pred_pil = Image.fromarray(cv2.cvtColor(pred_img, cv2.COLOR_BGR2RGB))
+                    pred_pil.save(f"{img_save_path}/pred_2.png")
 
-                # img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
-                # # cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
+                    img_with_contours.save(os.path.join(img_save_path, f"visual.jpg"))
+                # cv2.imwrite(os.path.join(img_save_path, f"uncertainty.jpg"), entropy_heat)
                 # cur_iou = I / U if U != 0 else 0
                 # with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
                 #     f.write(f"{obj_cap}, IoU:{cur_iou}\n")
@@ -391,6 +607,9 @@ def test_model(model, data_loader, device, logger, save_path, args):
         res_str += f"Precision@{str(eval_seg_iou_list[n_eval_iou])}={precision:.2f}%\n"
         # logger.info(f"Precision@{str(eval_seg_iou_list[n_eval_iou])}={precision:.2f}%\n")
     logger.info(res_str)
+    if args.visualize_gate_stats:
+        _save_gate_summary_plots(gate_records, gate_stats_root)
+        logger.info(f"Saved gate statistics and visualizations to {gate_stats_root}")
 
 def main():
     parser = get_parser()
