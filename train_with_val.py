@@ -453,14 +453,6 @@ def main():
 
         if local_rank == 0:
             logger.info(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
-            ## save the latest model
-            checkpoint, save_dict = make_checkpoint(
-                model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
-            )
-            logger.info(save_dict.keys())
-            torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
-            torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
-
             if val_loader is not None and (epoch + 1) % args.val_interval == 0:
                 val_metrics = validate_refcoco(model_without_ddp, val_loader, device, logger, epoch,
                                                args.val_print_interval)
@@ -488,10 +480,10 @@ def main():
                 )
                 torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_best.pth"))
 
-            checkpoint, _ = make_checkpoint(
+            checkpoint, save_dict = make_checkpoint(
                 model_without_ddp, optimizer, lr_scheduler, scaler, epoch, best_oIoU, best_loss
             )
-            torch.save(checkpoint, os.path.join(model_save_path, f"ris_sam_model_e_{epoch + 1}.pth"))
+            logger.info(save_dict.keys())
             torch.save(checkpoint, os.path.join(model_save_path, "ris_sam_model_latest.pth"))
 
         # %% plot loss
