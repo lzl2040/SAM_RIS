@@ -387,6 +387,12 @@ def main():
                                                      lambda x: (1 - x / (len(train_loader) * num_epochs)) ** 0.9)
 
     start_epoch = 0
+    if args.resume is not None and (not args.resume.strip() or not os.path.isfile(args.resume)):
+        logger.warning(
+            f"=> invalid resume checkpoint {args.resume!r}; ignoring it and proceeding without explicit resume"
+        )
+        args.resume = None
+
     if args.resume is None and args.auto_resume:
         latest_checkpoint = find_latest_checkpoint(args.work_dir, args.task_name)
         if latest_checkpoint is not None:
