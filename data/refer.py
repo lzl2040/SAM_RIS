@@ -24,6 +24,7 @@ showMask   - show mask of the referred object given ref
 """
 
 import sys
+import os
 import os.path as osp
 import json
 import pickle
@@ -303,7 +304,7 @@ class REFER:
 
 
 if __name__ == '__main__':
-	refer = REFER(data_root="/data/lizuolei/data/coco/", dataset='refcoco', splitBy='google')
+	refer = REFER(data_root=os.environ.get("REFER_DATA_ROOT", "/data/lizuolei/data/coco/"), dataset='refcoco', splitBy='google')
 	ref_ids = refer.getRefIds()
 	print(len(ref_ids))
 

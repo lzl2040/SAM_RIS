@@ -1,9 +1,10 @@
 import argparse
+import os
 
 
 def get_parser():
     parser = argparse.ArgumentParser(description='LAVT training and testing')
-    parser.add_argument('--output-dir', default='./checkpoints/', help='path where to save checkpoint weights')
+    parser.add_argument('--output-dir', default=os.environ.get("OUTPUT_DIR", "./checkpoints/"), help='path where to save checkpoint weights')
     parser.add_argument('--pin_mem', action='store_true',
                         help='If true, pin memory when using the data loader.')
 
@@ -17,18 +18,22 @@ def get_parser():
                         default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-All")
     parser.add_argument("--model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
     parser.add_argument("--sam2_pretrain_path", type=str,
-                        default="/home/v-zuoleili/Pretrain/sam2.1_hiera_small.pt")
+                        default=os.environ.get("SAM2_PRETRAIN_PATH", os.path.join(
+                            os.environ.get("PRETRAIN_WEIGHT_ROOT", "/home/v-zuoleili/Pretrain"),
+                            "sam2.1_hiera_small.pt")))
     parser.add_argument("--sam_model_type", type=str, default="vit_b", choices=["vit_b", "vit_h"],
                         help="Segment Anything image encoder/mask decoder variant for SAM_RIS.")
-    parser.add_argument("--sam_pretrain_path", type=str, default=None,
-                        help="Path to original SAM checkpoint. Defaults to /data/weights/Pretrain/sam_vit_*.pth.")
+    parser.add_argument("--sam_pretrain_path", type=str, default=os.environ.get("SAM_PRETRAIN_PATH"),
+                        help="Path to original SAM checkpoint. Uses PRETRAIN_WEIGHT_ROOT when set.")
     parser.add_argument("--blip2_path", type=str,
-                        default="/data/weights/Pretrain/instruct_blip_vicuna7b_trimmed.pth")
+                        default=os.environ.get("BLIP2_PATH", os.path.join(
+                            os.environ.get("PRETRAIN_WEIGHT_ROOT", "/data/weights/Pretrain"),
+                            "instruct_blip_vicuna7b_trimmed.pth")))
     parser.add_argument("--blip2_vit_model", type=str, default="eva_clip_g", choices=["clip_L", "eva_clip_g"],
                         help="Vision transformer model for BLIP-2.")
-    parser.add_argument("--work_dir", type=str, default="./work_dir")
-    parser.add_argument("--log_path", type=str, default="./log_path")
-    parser.add_argument("--pred_save_dir", type=str, default="./pred_visual")
+    parser.add_argument("--work_dir", type=str, default=os.environ.get("WORK_DIR", "./work_dir"))
+    parser.add_argument("--log_path", type=str, default=os.environ.get("LOG_PATH", "./log_path"))
+    parser.add_argument("--pred_save_dir", type=str, default=os.environ.get("PRED_SAVE_DIR", "./pred_visual"))
     # train
     parser.add_argument("--num_epochs", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=2)
@@ -49,14 +54,14 @@ def get_parser():
                         help="Disable mixed precision training when NaN/Inf is frequent.")
     # "/data/weights/MM_SAM/work_dir/full_mm_sam/ris_sam_model_e_40.pth"
     # /data/weights/MM_SAM/work_dir/mm_sam_tmfm_single_token/ris_sam_model_best.pth
-    parser.add_argument("--resume", type=str, default="/data/weights/MM_SAM/work_dir/mm_sam_tmfm_single_token/ris_sam_model_best.pth", help="Resuming training from checkpoint")
-    parser.add_argument("--pretrain", type=str, default=None, help="Resuming training from checkpoint")
+    parser.add_argument("--resume", type=str, default=os.environ.get("RESUME_PATH"), help="Resuming training from checkpoint")
+    parser.add_argument("--pretrain", type=str, default=os.environ.get("PRETRAIN_PATH"), help="Resuming training from checkpoint")
 
     parser.add_argument("--device", type=str, default="0")
     parser.add_argument('--image_size', type=int, default=1024, help='image_size')
     parser.add_argument("--cnn_img_size", type=int, default=480, help='cnn_img_size')
-    parser.add_argument('--ytvos_path', type=str, default='/data/lizuolei/data/ref-youtube-vos/')
-    parser.add_argument('--coco_path', type=str, default='/home/v-zuoleili/Data/coco/')
+    parser.add_argument('--ytvos_path', type=str, default=os.environ.get("YTVOS_PATH", "/data/lizuolei/data/ref-youtube-vos/"))
+    parser.add_argument('--coco_path', type=str, default=os.environ.get("COCO_PATH", "/home/v-zuoleili/Data/coco/"))
     parser.add_argument('--masks', action='store_true',
                         help="Train segmentation head if the flag is provided")
     parser.add_argument('--num_frames', default=3, type=int,
@@ -72,7 +77,7 @@ def get_parser():
                         help="Save stage-wise visual encoder activation maps before/after text-query fusion during testing.")
     parser.add_argument("--encoder_focus_samples", type=int, default=8,
                         help="Maximum number of caption instances to save for visual encoder focus visualization.")
-    parser.add_argument("--encoder_focus_dir", type=str, default=None,
+    parser.add_argument("--encoder_focus_dir", type=str, default=os.environ.get("ENCODER_FOCUS_DIR"),
                         help="Directory for visual encoder focus outputs. Defaults to pred_save_dir/encoder_focus.")
     parser.add_argument("--encoder_focus_keep_percent", type=float, default=15.0,
                         help="Keep only the top percentage of activation responses in encoder focus heatmaps.")
@@ -90,7 +95,7 @@ def get_parser():
                         help="Number of strongest query tokens used when --encoder_focus_attn_reduce=topk_mean.")
     parser.add_argument("--visualize_gate_stats", action="store_true",
                         help="Collect and visualize gating weights in VisionMultiModalQueryFusionModule during testing.")
-    parser.add_argument("--gate_stats_dir", type=str, default=None,
+    parser.add_argument("--gate_stats_dir", type=str, default=os.environ.get("GATE_STATS_DIR"),
                         help="Directory for gate statistics outputs. Defaults to pred_save_dir/gate_stats.")
     parser.add_argument("--gate_stats_interval", type=int, default=5,
                         help="Collect gate statistics every N caption instances during testing.")
@@ -100,7 +105,7 @@ def get_parser():
                         help="Maximum number of caption instances used for gate heatmap visualization. Set <= 0 to save all sampled instances.")
     parser.add_argument("--distributed", action='store_true')
     
-    parser.add_argument('--refer_data_root', default='/home/v-zuoleili/Data/coco', help='REFER dataset root directory')
+    parser.add_argument('--refer_data_root', default=os.environ.get("REFER_DATA_ROOT", "/home/v-zuoleili/Data/coco"), help='REFER dataset root directory')
     parser.add_argument('--dataset', default='all', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
                                                              'refs+ytvos')
 

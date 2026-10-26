@@ -2,6 +2,7 @@ from collections import OrderedDict
 from itertools import repeat
 import collections.abc
 import math
+import os
 
 import torch
 import torch.nn.functional as F
@@ -249,9 +250,11 @@ def create_clip_vit_L(img_size=224,use_checkpoint=False,precision="fp16"):
             use_grad_checkpointing=use_checkpoint,
         )         
     url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/clip_vit_L.pth"
-    cached_file = download_cached_file(
-        url, check_hash=False, progress=True
-    )
+    cached_file = os.environ.get("CLIP_VIT_PATH")
+    if cached_file is None:
+        cached_file = download_cached_file(
+            url, check_hash=False, progress=True
+        )
     state_dict = torch.load(cached_file, map_location="cpu")    
     interpolate_pos_embed(model,state_dict)
     

@@ -1,9 +1,13 @@
 # download data
+REFER_DATA_ROOT="${REFER_DATA_ROOT:-/home/v-zuoleili/Data/coco}"
+PRETRAIN_WEIGHT_ROOT="${PRETRAIN_WEIGHT_ROOT:-/home/v-zuoleili/Pretrain}"
+case "$PRETRAIN_WEIGHT_ROOT" in
+    /*) ;;
+    *) PRETRAIN_WEIGHT_ROOT="$PWD/$PRETRAIN_WEIGHT_ROOT" ;;
+esac
 sudo apt install unzip
-mkdir /home/v-zuoleili/Data
-cd /home/v-zuoleili/Data
-mkdir coco
-cd coco
+mkdir -p "$REFER_DATA_ROOT"
+cd "$REFER_DATA_ROOT"
 wget http://images.cocodataset.org/zips/train2014.zip
 unzip train2014.zip -d ./ && rm train2014.zip
 wget https://web.archive.org/web/20220413011718/https://bvisionweb1.cs.unc.edu/licheng/referit/data/refcoco.zip
@@ -14,8 +18,8 @@ unzip refcoco+.zip && rm refcoco+.zip
 unzip refcocog.zip && rm refcocog.zip
 
 # download pretrained weight
-mkdir /home/v-zuoleili/Pretrain
-cd /home/v-zuoleili/Pretrain
+mkdir -p "$PRETRAIN_WEIGHT_ROOT"
+cd "$PRETRAIN_WEIGHT_ROOT"
 wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_small.pt
 wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_base_plus.pt
 wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt

@@ -36,14 +36,15 @@ def resolve_sam_checkpoint(model_type, checkpoint):
     if checkpoint:
         return checkpoint
 
+    weight_root = os.environ.get("PRETRAIN_WEIGHT_ROOT", "/data/weights/Pretrain")
     candidates = {
         "vit_b": [
-            "/data/weights/Pretrain/sam_vit_b_01ec64.pth",
-            "/data/weights/Pretrain/sam_vit_b.pth",
+            os.path.join(weight_root, "sam_vit_b_01ec64.pth"),
+            os.path.join(weight_root, "sam_vit_b.pth"),
         ],
         "vit_h": [
-            "/data/weights/Pretrain/sam_vit_h_4b8939.pth",
-            "/data/weights/Pretrain/sam_vit_h.pth",
+            os.path.join(weight_root, "sam_vit_h_4b8939.pth"),
+            os.path.join(weight_root, "sam_vit_h.pth"),
         ],
     }
     for path in candidates.get(model_type, []):
@@ -57,7 +58,7 @@ def build_sam_ris_backbone(model_type="vit_b", checkpoint=None, image_size = 102
     if checkpoint is None or not os.path.isfile(checkpoint):
         raise FileNotFoundError(
             f"SAM checkpoint for {model_type} not found. Put it under "
-            f"/data/weights/Pretrain or pass --sam_pretrain_path. Expected: {checkpoint}"
+            f"PRETRAIN_WEIGHT_ROOT or pass --sam_pretrain_path. Expected: {checkpoint}"
         )
     return sam_model_registry[model_type](checkpoint=checkpoint, image_size=image_size)
 

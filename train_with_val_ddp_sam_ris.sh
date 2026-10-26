@@ -1,4 +1,4 @@
-export TORCH_HOME=/mnt/lizuolei/gxy/checkpoints/Pretrain
+export TORCH_HOME="${TORCH_HOME:-${PRETRAIN_WEIGHT_ROOT:-/mnt/lizuolei/gxy/checkpoints/Pretrain}}"
 # instruct_blip_vicuna7b_trimmed.pth
 # blip2_pretrained_vitL.pth
 # gxy/checkpoints/Pretrain/sam_vit_b_01ec64.pth
@@ -7,8 +7,8 @@ unset NCCL_DEBUG
 torchrun --nproc_per_node=8 \
   train_with_val_sam_ris.py \
   --sam_model_type vit_b \
-  --sam_pretrain_path /mnt/lizuolei/gxy/checkpoints/Pretrain/sam_vit_b_01ec64.pth \
-  --refer_data_root /mnt/lizuolei/gxy/Data/coco \
+  --sam_pretrain_path "${SAM_PRETRAIN_PATH:-${PRETRAIN_WEIGHT_ROOT:-/mnt/lizuolei/gxy/checkpoints/Pretrain}/sam_vit_b_01ec64.pth}" \
+  --refer_data_root "${REFER_DATA_ROOT:-/mnt/lizuolei/gxy/Data/coco}" \
   --num_epochs 40 \
   --batch_size 18 \
   --image_size 480 \
@@ -18,9 +18,9 @@ torchrun --nproc_per_node=8 \
   --lr 5e-5 \
   --grad_clip_norm 1.0 \
   --logit_clip_value 32.0 \
-  --work_dir /mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir \
-  --log_path /mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path \
-  --blip2_path /mnt/lizuolei/gxy/checkpoints/Pretrain/instruct_blip_vicuna7b_trimmed.pth \
+  --work_dir "${WORK_DIR:-/mnt/lizuolei/gxy/checkpoints/MM_SAM/work_dir}" \
+  --log_path "${LOG_PATH:-/mnt/lizuolei/gxy/checkpoints/MM_SAM/log_path}" \
+  --blip2_path "${BLIP2_PATH:-${PRETRAIN_WEIGHT_ROOT:-/mnt/lizuolei/gxy/checkpoints/Pretrain}/instruct_blip_vicuna7b_trimmed.pth}" \
   --blip2_vit_model eva_clip_g \
   --val_interval 1 \
   --val_print_interval 100 \

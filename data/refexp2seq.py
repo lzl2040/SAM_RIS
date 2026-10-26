@@ -6,6 +6,7 @@ COCO dataset which returns image_id for evaluation.
 Mostly copy-paste from https://github.com/pytorch/vision/blob/13b35ff/references/detection/coco_utils.py
 """
 from pathlib import Path
+import os
 
 import torch
 import torch.utils.data
@@ -275,7 +276,7 @@ class SimpleTransforms(object):
         return ret_images, ret_masks
 
 def build(dataset_file, image_set, args):
-    root = Path("./refer/data/")
+    root = Path(os.environ.get("REFEXP_DATA_ROOT", "./refer/data/"))
     assert root.exists(), f"provided COCO path {root} does not exist"
     mode = "instances"
     dataset = dataset_file

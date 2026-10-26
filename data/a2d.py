@@ -257,7 +257,7 @@ class SimpleTransformsA2D(object):
 
 
 def build_a2d_dataset(args, image_set):
-    root = Path('./data/A2D')
+    root = Path(os.environ.get("A2D_DATA_ROOT", "./data/A2D"))
     assert root.exists(), f'provided A2D-Sentences path {root} does not exist'
     PATHS = {
         "train": (root, root / "Release/a2d_sentences_single_frame_train_annotations.json"),
@@ -270,7 +270,6 @@ def build_a2d_dataset(args, image_set):
                                   num_frames=args.num_frames, subset=image_set)
     print(dataset)
     return dataset
-
 
 
 
