@@ -54,24 +54,35 @@ fi
 
 if [[ "$MODE" == all || "$MODE" == data || "$MODE" == lmdb ]]; then
     "$PYTHON" - <<'PY'
-try:
-    import cv2
-    import lmdb
-    import matplotlib
-    import numpy as np
-    import pyarrow as pa
-    import pycocotools.mask
-    import skimage
-    import tqdm
-    assert hasattr(pa, "serialize") and hasattr(pa, "deserialize")
-except (ImportError, AssertionError) as error:
+import importlib
+import sys
+
+errors = []
+for name in ("cv2", "lmdb", "matplotlib", "numpy", "pyarrow",
+             "pycocotools.mask", "skimage", "tqdm"):
+    try:
+        module = importlib.import_module(name)
+    except Exception as error:
+        errors.append(f"{name}: {type(error).__name__}: {error}")
+        continue
+    if name == "pyarrow" and not (
+        hasattr(module, "serialize") and hasattr(module, "deserialize")
+    ):
+        errors.append(
+            f"pyarrow {module.__version__}: serialize/deserialize are missing; "
+            "DETRIS requires the legacy API from pyarrow==11.0.0."
+        )
+if errors:
+    print(f"Conversion Python: {sys.executable} ({sys.version.split()[0]})", file=sys.stderr)
+    print("Conversion dependency errors:\n- " + "\n- ".join(errors), file=sys.stderr)
     raise SystemExit(
-        "DETRIS conversion requires its legacy PyArrow serialization (not pickle).\n"
-        "Use Python 3.10/3.11 and install in that environment:\n"
-        "python -m pip install 'numpy<2' 'pyarrow==11.0.0' lmdb pycocotools "
-        "'opencv-python-headless<4.12' matplotlib scikit-image tqdm\n"
-        "Select that interpreter with PYTHON=/path/to/python."
-    ) from error
+        "\nCreate a separate conversion environment (no sudo; leaves training packages unchanged):\n"
+        "conda create -n detris-data python=3.10 pip -y\n"
+        "conda run -n detris-data python -m pip install 'numpy<2' 'pyarrow==11.0.0' "
+        "lmdb pycocotools 'opencv-python-headless<4.12' matplotlib scikit-image tqdm\n"
+        "Then select that environment's Python with PYTHON=/path/to/python "
+        "and rerun prepare.sh lmdb."
+    )
 PY
 
     # Pin upstream tools so later DETRIS changes cannot alter the on-disk format.
