@@ -12,9 +12,16 @@ h5py
 nltk
 monai
 iopath
-opencv-python
+opencv-python-headless<4.12
 webdataset
 fairscale
 scikit-image
 matplotlib
 open_clip_torch
+
+# DETRIS dataset conversion (Python 3.10/3.11).
+numpy<2
+pyarrow==11.0.0
+lmdb
+pycocotools
+tqdm
