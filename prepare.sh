@@ -12,6 +12,14 @@ esac
 REFER_DATA_ROOT="${REFER_DATA_ROOT:-/home/v-zuoleili/Data/coco}"
 PRETRAIN_WEIGHT_ROOT="${PRETRAIN_WEIGHT_ROOT:-/home/v-zuoleili/Pretrain}"
 PYTHON="${PYTHON:-python}"
+
+download() {
+    if ! wget -q -c "$1"; then
+        echo "Download failed: $1 (rerun to resume)" >&2
+        return 1
+    fi
+}
+
 case "$REFER_DATA_ROOT" in
     /*) ;;
     *) REFER_DATA_ROOT="$PWD/$REFER_DATA_ROOT" ;;
@@ -25,8 +33,8 @@ if [[ "$MODE" == all || "$MODE" == data ]]; then
     mkdir -p "$REFER_DATA_ROOT"
     cd "$REFER_DATA_ROOT"
     if [[ ! -d train2014 && ! -d images/train2014 ]]; then
-        wget -c http://images.cocodataset.org/zips/train2014.zip
-        unzip -q train2014.zip
+        download http://images.cocodataset.org/zips/train2014.zip
+        "$PYTHON" -m zipfile -e train2014.zip .
         rm train2014.zip
     fi
     for dataset in refcoco 'refcoco+' refcocog; do
@@ -37,8 +45,8 @@ if [[ "$MODE" == all || "$MODE" == data ]]; then
         esac
         if [[ ! -f "$dataset/instances.json" || ! -f "$dataset/refs(unc).p" && "$dataset" != refcocog ||
               "$dataset" == refcocog && ( ! -f "$dataset/refs(umd).p" || ! -f "$dataset/refs(google).p" ) ]]; then
-            wget -c "https://web.archive.org/web/$timestamp/https://bvisionweb1.cs.unc.edu/licheng/referit/data/$dataset.zip"
-            unzip -oq "$dataset.zip"
+            download "https://web.archive.org/web/$timestamp/https://bvisionweb1.cs.unc.edu/licheng/referit/data/$dataset.zip"
+            "$PYTHON" -m zipfile -e "$dataset.zip" .
             rm "$dataset.zip"
         fi
     done
@@ -73,7 +81,7 @@ PY
     DETRIS_TOOLS_DIR="$(cd "$DETRIS_TOOLS_DIR" && pwd)"
     for tool in data_process.py folder2lmdb.py refer.py; do
         if [[ ! -s "$DETRIS_TOOLS_DIR/$tool" ]]; then
-            curl --fail --location --retry 3 \
+            curl --silent --show-error --fail --location --retry 3 \
                 "https://raw.githubusercontent.com/jiaqihuang01/DETRIS/$DETRIS_REV/tools/$tool" \
                 --output "$DETRIS_TOOLS_DIR/$tool.part"
             mv "$DETRIS_TOOLS_DIR/$tool.part" "$DETRIS_TOOLS_DIR/$tool"
@@ -177,12 +185,12 @@ if [[ "$MODE" == all || "$MODE" == weights ]]; then
     for model in small base_plus large; do
         filename="sam2.1_hiera_$model.pt"
         if [[ ! -s "$filename" ]]; then
-            wget -c "https://dl.fbaipublicfiles.com/segment_anything_2/092824/$filename"
+            download "https://dl.fbaipublicfiles.com/segment_anything_2/092824/$filename"
         fi
     done
     for entry in BLIP2/eva_vit_g.pth InstructBLIP/instruct_blip_vicuna7b_trimmed.pth; do
         if [[ ! -s "${entry##*/}" ]]; then
-            wget -c "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/$entry"
+            download "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/$entry"
         fi
     done
 fi
