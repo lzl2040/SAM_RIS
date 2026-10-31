@@ -98,21 +98,36 @@ def get_dataset(image_set, transform, cnn_transform, args, eval_mode=False):
                         cnn_transform=cnn_transform,
                         eval_mode=eval_mode,
                         )
+    if image_set == "train" and args.exclude_eval_images:
+        datasets = ds.datasets if isinstance(ds, ConcatDataset) else [ds]
+        held_out = {
+            ref["image_id"] for dataset in datasets for ref in dataset.refer.Refs.values()
+            if ref["split"] != "train"
+        }
+        for dataset in datasets:
+            kept = [index for index, ref_id in enumerate(dataset.ref_ids)
+                    if dataset.refer.Refs[ref_id]["image_id"] not in held_out]
+            dataset.ref_ids = [dataset.ref_ids[index] for index in kept]
+            dataset.captions = [dataset.captions[index] for index in kept]
+        # ConcatDataset caches cumulative lengths at construction.
+        ds = ConcatDataset(datasets) if isinstance(ds, ConcatDataset) else datasets[0]
     return ds
 
 
 def build_refcoco_val_loader(args, image_transforms, cnn_transform):
     original_dataset = args.dataset
     original_split_by = args.splitBy
-    args.dataset = "refcoco"
-    args.splitBy = "unc"
-    val_dataset = get_dataset("val",
-                              transform=image_transforms,
-                              cnn_transform=cnn_transform,
-                              args=args,
-                              eval_mode=True)
-    args.dataset = original_dataset
-    args.splitBy = original_split_by
+    args.dataset = args.val_dataset or (original_dataset if original_dataset != "all" else "refcoco")
+    args.splitBy = args.val_split_by or (original_split_by if args.dataset == "refcocog" else "unc")
+    try:
+        val_dataset = get_dataset("val",
+                                  transform=image_transforms,
+                                  cnn_transform=cnn_transform,
+                                  args=args,
+                                  eval_mode=True)
+    finally:
+        args.dataset = original_dataset
+        args.splitBy = original_split_by
     val_sampler = torch.utils.data.SequentialSampler(val_dataset)
     return DataLoader(val_dataset,
                       batch_size=1,
@@ -213,6 +228,8 @@ def load_resume_checkpoint(resume_path, model, optimizer, lr_scheduler, scaler, 
 
     logger.info(f"=> loading resume checkpoint '{resume_path}'")
     checkpoint = torch.load(resume_path, map_location="cpu", weights_only=False)
+    if checkpoint.get("experiment_config") != model.experiment_config:
+        raise ValueError("Resume configuration differs or is missing; start a new controlled run.")
     model.load_state_dict(checkpoint["model"], strict=False)
 
     if "optimizer" in checkpoint:
@@ -266,6 +283,8 @@ def make_checkpoint(model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, be
     save_dict = {k: v for k, v in model_dict.items() if 'mask_decoder' in k or 'Qformer' in k
                  or 'resizer' in k or 'fusion' in k or 'score' in k or "obj_ptr_proj" in k
                  or "lora" in k or "cnn" in k}
+    trainable = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+    save_dict.update({key: value for key, value in model_dict.items() if key in trainable})
     checkpoint = {
         "model": save_dict,
         "optimizer": optimizer.state_dict(),
@@ -274,6 +293,7 @@ def make_checkpoint(model, optimizer, lr_scheduler, scaler, epoch, best_oIoU, be
         "epoch": epoch + 1,
         "best_oIoU": best_oIoU,
         "best_loss": best_loss,
+        "experiment_config": model.experiment_config,
     }
     if val_metrics is not None:
         for metric_name, metric_value in val_metrics.items():
@@ -309,7 +329,7 @@ def main():
     def worker_init_fn(worker_id):
         return np.random.seed(torch.initial_seed() % (2 ** 31) + worker_id + local_rank * 100)
 
-    set_seed(14159265)
+    set_seed(args.seed)
 
     model_cfg = args.model_cfg
     sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=device, apply_postprocessing=True)
@@ -372,7 +392,7 @@ def main():
     if local_rank == 0:
         print("Number of training samples: ", len(train_dataset))
         if val_loader is not None:
-            print("Number of refcoco val samples: ", len(val_loader.dataset))
+            print("Number of validation samples: ", len(val_loader.dataset))
     if args.distributed:
         # sampler_train = samplers.DistributedSampler(ytvos_train_dataset)
         # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)

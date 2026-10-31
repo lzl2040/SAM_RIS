@@ -386,6 +386,10 @@ class Blip2Qformer(Blip2Base):
 
     @torch.no_grad()
     def extract_features(self, samples, mode="multimodal", visual=False):
+        return self.extract_features_with_grad(samples, mode=mode, visual=visual)
+
+    def extract_features_with_grad(self, samples, mode="multimodal", visual=False,
+                                   use_tmfm=True, tmfm_output="text"):
         """
         Extract features for multimodal or unimodal samples.
         Args:
@@ -506,13 +510,25 @@ class Blip2Qformer(Blip2Base):
             # raw_multimodal_embeds = output.last_hidden_state[:, query_tokens.size(1):, :]
             # multimodal_embeds = raw_multimodal_embeds
 
-            # 跟文本再次融合
-            multimodal_embeds = self.Qformer.bert(
-                text.input_ids,
-                query_embeds=raw_multimodal_embeds,
-                attention_mask=attention_mask,
-                return_dict=True,
-            ).last_hidden_state[:, 32:] # defalut use text token
+            multimodal_embeds = raw_multimodal_embeds
+            if use_tmfm:
+                fused = self.Qformer.bert(
+                    text.input_ids,
+                    query_embeds=raw_multimodal_embeds,
+                    attention_mask=attention_mask,
+                    return_dict=True,
+                ).last_hidden_state
+                query_count = query_tokens.size(1)
+                if tmfm_output == "text":
+                    multimodal_embeds = fused[:, query_count:]
+                elif tmfm_output == "query":
+                    multimodal_embeds = fused[:, :query_count]
+                elif tmfm_output == "all":
+                    multimodal_embeds = fused
+                elif tmfm_output == "cls":
+                    multimodal_embeds = fused[:, query_count:query_count + 1]
+                else:
+                    raise ValueError(f"Unknown TMFM output: {tmfm_output}")
             # last_hidden_state[:, 32:]  # defalut use text token
             # .last_hidden_state[:, :] # all token
             # .last_hidden_state[:, :32] # multi-model query token

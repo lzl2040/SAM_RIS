@@ -94,6 +94,29 @@ class SAM2_RIS(nn.Module):
         super().__init__()
         self.device = device
         self.sam2_model = model
+        self.use_mma = args.ablation in ("full", "mma_only")
+        self.use_tmfm = args.ablation in ("full", "tmfm_only")
+        self.experiment_config = {
+            "ablation": args.ablation,
+            "tmfm_output": args.tmfm_output if self.use_tmfm else None,
+            "qformer_grad": True,
+            "model_cfg": args.model_cfg,
+            "blip2_vit_model": args.blip2_vit_model,
+            "blip2_path": args.blip2_path,
+            "dataset": args.dataset,
+            "splitBy": args.splitBy,
+            "image_size": args.image_size,
+            "seed": args.seed,
+            "val_dataset": args.val_dataset,
+            "val_split_by": args.val_split_by,
+            "exclude_eval_images": args.exclude_eval_images,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "num_epochs": args.num_epochs,
+            "batch_size": args.batch_size,
+            "grad_accumulation_steps": args.grad_accumulation_steps,
+            "world_size": int(os.environ.get("WORLD_SIZE", "1")) if args.distributed else 1,
+        }
         self.blip2_qformer = load_blip2_qformer(args.blip2_path, args.blip2_vit_model)
         # multi model queries
         self.query_resizer = FeatureResizer(
@@ -133,11 +156,10 @@ class SAM2_RIS(nn.Module):
         for name, param in self.sam2_model.sam_mask_decoder.named_parameters():
             param.requires_grad = True
         for name, param in self.sam2_model.image_encoder.named_parameters():
-            if "fusion" in name:
+            if "fusion" in name and self.use_mma:
                 param.requires_grad = True
                 continue
             param.requires_grad = False
-        self.blip2_qformer.query_tokens.requires_grad_(True)
         # qformer可训练
         for name, param in self.blip2_qformer.named_parameters():
             if "Qformer" in name:
@@ -145,15 +167,19 @@ class SAM2_RIS(nn.Module):
                 param.requires_grad = True
                 continue
             param.requires_grad = False
+        self.blip2_qformer.query_tokens.requires_grad_(True)
 
     def set_model_save_path(self, model_save_path):
         self.save_path = model_save_path
 
     def generate_queries(self, blip2_imgs, repeat_catpipns):
-        blip2_output, final_cross_attention_score = self.blip2_qformer.extract_features(
-            {"image": blip2_imgs, "text_input": repeat_catpipns}, mode="multimodal")
+        blip2_output, final_cross_attention_score = self.blip2_qformer.extract_features_with_grad(
+            {"image": blip2_imgs, "text_input": repeat_catpipns}, mode="multimodal",
+            use_tmfm=self.use_tmfm, tmfm_output=self.args.tmfm_output)
 
         raw_multimodal_queries = blip2_output.multimodel_query # not fuse with text again, length=32
+        if not self.use_mma:
+            raw_multimodal_queries = None
         # raw_multimodal_queries = self.query_num_resizer[0](raw_multimodal_queries.transpose(-1, -2)).transpose(-1, -2)
         # raw_multimodal_queries = None
         # print(raw_multimodal_queries.shape)

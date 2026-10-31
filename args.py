@@ -17,6 +17,18 @@ def get_parser():
     parser.add_argument("--task_name", type=str,
                         default="SAM2-S-1024-IBLIP2-Vicun7B-Query-1-FT-QFormer-Fusion-In-Image-Pass-Next-Layer-CNN-Token-Fusion-AMP-E-40-All")
     parser.add_argument("--model_cfg", type=str, default="sam2_hiera_b+.yaml", help="model config file")
+    parser.add_argument("--ablation", choices=["full", "baseline", "mma_only", "tmfm_only"],
+                        default="full", help="Controlled SAM2 ablation; all modes keep the same Q-Former.")
+    parser.add_argument("--tmfm_output", choices=["text", "query", "all", "cls"], default="text",
+                        help="Output tokens of the second Q-Former pass when TMFM is enabled.")
+    parser.add_argument("--val_dataset", choices=["refcoco", "refcoco+", "refcocog"], default=None,
+                        help="Validation dataset; defaults to training dataset, or refcoco for mixed training.")
+    parser.add_argument("--val_split_by", choices=["unc", "umd", "google"], default=None)
+    parser.add_argument("--seed", type=int, default=14159265)
+    parser.add_argument("--exclude_eval_images", action="store_true",
+                        help="Remove training refs whose images occur in any loaded dataset's held-out refs.")
+    parser.add_argument("--controlled_visuals", action="store_true",
+                        help="Save every evaluated prediction and probability map without comparison-file dependencies.")
     parser.add_argument("--sam2_pretrain_path", type=str,
                         default=os.environ.get("SAM2_PRETRAIN_PATH", os.path.join(
                             os.environ.get("PRETRAIN_WEIGHT_ROOT", "/home/v-zuoleili/Pretrain"),

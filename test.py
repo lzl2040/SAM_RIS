@@ -533,7 +533,8 @@ def test_model(model, data_loader, device, logger, save_path, args):
                     align_corners=False,
                 )
                 pred_masks = torch.sigmoid(pred_logits)
-                pred_masks = pred_masks.detach().cpu().numpy()
+                probabilities = pred_masks.detach().cpu().numpy()
+                pred_masks = probabilities
                 pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
                 target_ = org_mask.cpu().data.numpy()
                 # print(pred_masks.shape, target_.shape) # B C=1 H E
@@ -562,9 +563,17 @@ def test_model(model, data_loader, device, logger, save_path, args):
                 folder_name = obj_cap.replace(" ", "_")
                 img_save_path = os.path.join(save_path, f"{seg_total}_{folder_name}")
                 os.makedirs(img_save_path, exist_ok=True)
-                with open(os.path.join(img_save_path, "caption.txt"), "r") as f:
-                    res_txt = f.read().strip()
-                model_1_iou = float(res_txt.split("IoU:")[-1])
+                if args.controlled_visuals:
+                    model_1_iou = float("inf")
+                    Image.fromarray((probabilities[0, 0] * 255).astype(np.uint8)).save(
+                        os.path.join(img_save_path, "probability.png"))
+                    Image.fromarray(sam2_pred[0] * 255).save(os.path.join(img_save_path, "mask.png"))
+                    with open(os.path.join(img_save_path, "caption.txt"), "w") as f:
+                        f.write(f"{obj_cap}, IoU:{this_iou}\n")
+                else:
+                    with open(os.path.join(img_save_path, "caption.txt"), "r") as f:
+                        res_txt = f.read().strip()
+                    model_1_iou = float(res_txt.split("IoU:")[-1])
 
                 raw_img_pil = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
                 raw_img_pil.save(f"{img_save_path}/image.png")
@@ -614,13 +623,17 @@ def test_model(model, data_loader, device, logger, save_path, args):
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    if args.resume is None or not os.path.isfile(args.resume):
+        raise FileNotFoundError("Pass --resume with the checkpoint to evaluate.")
+    if args.controlled_visuals:
+        args.pred_save_dir = os.path.join(args.pred_save_dir, args.ablation, args.tmfm_output)
     os.makedirs(args.log_path, exist_ok=True)
     args.log_path = os.path.join(args.log_path, f"{args.task_name}_test_e_38.txt")
     args.pretrain_model_path = config2model_path[args.model_cfg]
 
     logger = get_logger(args.log_path)
 
-    device = torch.device(int(args.device))
+    device = torch.device(f"cuda:{args.device}")
     image_transforms, cnn_transforms = get_transform(args)
 
     dataset_test = get_dataset(args.split, image_transforms, None, cnn_transforms, args,
@@ -642,6 +655,11 @@ def main():
             ## Map model to be loaded to specified single GPU
             logger.info("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume, map_location="cpu")
+            saved_config = checkpoint.get("experiment_config")
+            if saved_config is not None:
+                for key in ("ablation", "tmfm_output", "model_cfg", "blip2_vit_model", "image_size"):
+                    if saved_config[key] != sam_ris_model.experiment_config[key]:
+                        raise ValueError(f"Checkpoint configuration mismatch: {key}")
             sam_ris_model.load_state_dict(checkpoint["model"], strict=False)
     sam_ris_model.eval()
     os.makedirs(args.pred_save_dir, exist_ok=True)
