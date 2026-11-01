@@ -74,6 +74,20 @@ class ControlledAblationTests(unittest.TestCase):
         torch.manual_seed(7)
         self.parser = runpy.run_path(str(ROOT / "args.py"))["get_parser"]()
 
+    def test_benchmark_flags_do_not_leak_into_training_parser(self):
+        parse = runpy.run_path(str(ROOT / "benchmark_validation.py"))["benchmark_options"]
+        options, remaining = parse([
+            "--bench_samples", "20", "--bench_batches", "1", "4", "--bench_repeats", "2",
+            "--resume", "/tmp/checkpoint.pth", "--val_amp", "--dataset", "refcoco+",
+        ])
+        self.assertEqual(options.bench_samples, 20)
+        self.assertEqual(options.bench_batches, [1, 4])
+        self.assertEqual(options.bench_repeats, 2)
+        args = self.parser.parse_args(remaining)
+        self.assertEqual(args.dataset, "refcoco+")
+        self.assertTrue(args.val_amp)
+        self.assertEqual(args.resume, "/tmp/checkpoint.pth")
+
     def model(self, mode, output="text"):
         qformer = qformer_class()
         sam = nn.Module()
