@@ -1,5 +1,6 @@
 import ast
 import copy
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import runpy
@@ -211,6 +212,60 @@ class ControlledAblationTests(unittest.TestCase):
             self.assertEqual(np.array(Image.open(Path(directory) / "probability.png")).ravel().tolist(), [63, 191])
             self.assertEqual(np.array(Image.open(Path(directory) / "mask.png")).ravel().tolist(), [0, 255])
             self.assertIn("IoU:0.5", (Path(directory) / "caption.txt").read_text())
+
+    def test_batched_validation_preserves_all_caption_metrics(self):
+        namespace = load_definitions(
+            "train_with_val.py", ["validate_refcoco", "local_print_step"],
+            {"torch": torch, "F": torch.nn.functional, "nullcontext": nullcontext,
+             "tqdm": lambda iterable: iterable},
+        )
+
+        class Predictor(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+                self.seen = []
+
+            def forward(self, image, cnn, raw, blip, target, captions, *args, **kwargs):
+                self.calls += 1
+                self.seen.extend(captions)
+                self_grad = torch.is_grad_enabled()
+                assert not self_grad
+                assert image.shape[0] == len(captions)
+                masks = {
+                    "perfect": [[1., -1.], [-1., -1.]],
+                    "wrong": [[-1., 1.], [-1., -1.]],
+                    "full": [[1., 1.], [1., 1.]],
+                    "empty": [[-1., -1.], [-1., -1.]],
+                }
+                logits = torch.tensor([masks[caption] for caption in captions])[:, None]
+                return None, logits, None, None, None
+
+        image = torch.zeros(1, 3, 2, 2)
+        target = torch.tensor([[[1, 0], [0, 0]]])
+        row = (image, image, target, ["perfect#####wrong#####full#####empty#####perfect"],
+               image, image, {"org_size": torch.tensor([[2, 2]]), "raw_masks": target})
+        results = []
+        for batch_size in (1, 2, 4):
+            model = Predictor()
+            metrics = namespace["validate_refcoco"](
+                model, [row], "cpu", Mock(), 0, 1, batch_size=batch_size)
+            self.assertTrue(model.training)
+            self.assertEqual(len(model.seen), 5)
+            self.assertEqual(model.calls, (5 + batch_size - 1) // batch_size)
+            self.assertAlmostEqual(metrics["mIoU"], .45)
+            self.assertAlmostEqual(metrics["oIoU"], 3 / 9)
+            self.assertEqual(metrics["Precision@0.5"], 40.)
+            results.append(metrics)
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(results[0], results[2])
+        row = (image, image, torch.zeros_like(target), ["empty"], image, image,
+               {"org_size": torch.tensor([[2, 2]]), "raw_masks": torch.zeros_like(target)})
+        model = Predictor().eval()
+        metrics = namespace["validate_refcoco"](model, [row], "cpu", Mock(), 0, 0)
+        self.assertFalse(model.training)
+        self.assertEqual(metrics["mIoU"], 0.)
+        self.assertEqual(metrics["oIoU"], 0.)
 
 
 if __name__ == "__main__":

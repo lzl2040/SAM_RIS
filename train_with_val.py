@@ -136,59 +136,70 @@ def build_refcoco_val_loader(args, image_transforms, cnn_transform):
                       pin_memory=True)
 
 
-def validate_refcoco(model, data_loader, device, logger, epoch, print_interval):
-    cum_I, cum_U = 0, 0
-    mean_iou = AverageMeter()
+def validate_refcoco(model, data_loader, device, logger, epoch, print_interval,
+                     batch_size=4, amp=False):
+    if batch_size < 1:
+        raise ValueError("Validation batch size must be positive")
     eval_seg_iou_list = [.5, .6, .7, .8, .9]
-    seg_correct = np.zeros(len(eval_seg_iou_list), dtype=np.int32)
+    totals = torch.zeros(8, dtype=torch.float64, device=device)
+    thresholds = torch.tensor(eval_seg_iou_list, dtype=torch.float64, device=device)
     seg_total = 0
 
+    was_training = model.training
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         for step, (imgs, cnn_imgs, target, captions, blip2_imgs, imgs_wo_trans, info) in enumerate(tqdm(data_loader)):
-            imgs = imgs.to(device)
-            target = target.to(device)
-            blip2_imgs = blip2_imgs.to(device)
-            cnn_imgs = cnn_imgs.to(device)
+            imgs = imgs.to(device, non_blocking=True)
+            target = target.to(device, non_blocking=True)
+            blip2_imgs = blip2_imgs.to(device, non_blocking=True)
+            cnn_imgs = cnn_imgs.to(device, non_blocking=True)
 
             captions = captions[0].split("#####")
             org_W, org_H = info["org_size"][0]
-            org_mask = info["raw_masks"].unsqueeze(0)
+            org_mask = info["raw_masks"].to(device, non_blocking=True).bool()
 
-            for obj_cap in captions:
-                _, low_pred_logits, _, _, _ = model(imgs, cnn_imgs, imgs_wo_trans, blip2_imgs,
-                                                    target, obj_cap, step, epoch, multi_mask=False)
+            for start in range(0, len(captions), batch_size):
+                caption_batch = captions[start:start + batch_size]
+                count = len(caption_batch)
+
+                def repeat(tensor):
+                    return tensor.expand(count, *tensor.shape[1:]).contiguous()
+
+                autocast = torch.autocast("cuda") if amp and imgs.is_cuda else nullcontext()
+                with autocast:
+                    _, low_pred_logits, _, _, _ = model(
+                        repeat(imgs), repeat(cnn_imgs), repeat(imgs_wo_trans),
+                        repeat(blip2_imgs), repeat(target), caption_batch,
+                        step, epoch, multi_mask=False)
                 pred_logits = F.interpolate(
-                    low_pred_logits,
-                    size=(org_H, org_W),
+                    low_pred_logits.float(),
+                    size=(int(org_H), int(org_W)),
                     mode="bilinear",
                     align_corners=False,
                 )
-                pred_masks = torch.sigmoid(pred_logits)
-                pred_masks = pred_masks.detach().cpu().numpy()
-                pred_masks = np.array(pred_masks > 0.5).astype(np.uint8)
-                target_ = org_mask.cpu().data.numpy()
-                I, U = IoU(pred_masks, target_)
-                this_iou = 0.0 if U == 0 else I * 1.0 / U
-                mean_iou.update(this_iou)
-                cum_I += I
-                cum_U += U
-                for n_eval_iou in range(len(eval_seg_iou_list)):
-                    eval_seg_iou = eval_seg_iou_list[n_eval_iou]
-                    seg_correct[n_eval_iou] += (this_iou >= eval_seg_iou)
-                seg_total += 1
+                pred_masks = torch.sigmoid(pred_logits) > 0.5
+                intersection = (pred_masks & org_mask).flatten(1).sum(1).double()
+                union = (pred_masks | org_mask).flatten(1).sum(1).double()
+                ious = torch.where(union > 0, intersection / union.clamp_min(1), 0.)
+                totals[0] += intersection.sum()
+                totals[1] += union.sum()
+                totals[2] += ious.sum()
+                totals[3:] += (ious[:, None] >= thresholds).sum(0)
+                seg_total += count
 
             if local_print_step(step, print_interval):
+                cum_I, cum_U, iou_sum, *seg_correct = totals.tolist()
                 o_iou = 0.0 if cum_U == 0 else cum_I / cum_U
                 precision_log = ", ".join(
                     f"Pr@{eval_seg_iou_list[i]:.1f}:{seg_correct[i] * 100.0 / max(seg_total, 1):.2f}"
                     for i in range(len(eval_seg_iou_list))
                 )
                 logger.info(f"Val Epoch: {epoch + 1} Step:{step}/{len(data_loader)} "
-                            f"mIoU:{mean_iou.avg * 100:.4f}, oIoU:{o_iou * 100:.4f}, "
+                            f"mIoU:{iou_sum / max(seg_total, 1) * 100:.4f}, oIoU:{o_iou * 100:.4f}, "
                             f"{precision_log}")
 
-    m_iou = mean_iou.avg
+    cum_I, cum_U, iou_sum, *seg_correct = totals.tolist()
+    m_iou = iou_sum / max(seg_total, 1)
     o_iou = 0.0 if cum_U == 0 else cum_I / cum_U
     precision_metrics = {
         f"Precision@{eval_seg_iou_list[i]:.1f}": seg_correct[i] * 100.0 / max(seg_total, 1)
@@ -197,7 +208,7 @@ def validate_refcoco(model, data_loader, device, logger, epoch, print_interval):
     precision_log = ", ".join(f"{key}: {value:.2f}%" for key, value in precision_metrics.items())
     logger.info(f"Val Final Epoch: {epoch + 1}, Samples: {seg_total}, "
                 f"mIoU: {m_iou * 100:.4f}, oIoU: {o_iou * 100:.4f}, {precision_log}")
-    model.train()
+    model.train(was_training)
     return {"mIoU": m_iou, "oIoU": o_iou, **precision_metrics}
 
 
@@ -481,7 +492,8 @@ def main():
             logger.info(f'Time: {datetime.now().strftime("%Y%m%d-%H%M")}, Epoch: {epoch}, Loss: {epoch_loss}')
             if val_loader is not None and (epoch + 1) % args.val_interval == 0:
                 val_metrics = validate_refcoco(model_without_ddp, val_loader, device, logger, epoch,
-                                               args.val_print_interval)
+                                               args.val_print_interval,
+                                               batch_size=args.val_batch_size, amp=args.val_amp)
                 val_oIoU = val_metrics["oIoU"]
                 logger.info(f"Validation at epoch {epoch + 1}: mIoU={val_metrics['mIoU'] * 100:.4f}, oIoU={val_oIoU * 100:.4f}")
                 if val_oIoU > best_oIoU:

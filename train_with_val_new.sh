@@ -37,6 +37,7 @@ torchrun --nproc_per_node="${NPROC_PER_NODE:-1}" \
     --blip2_path "$BLIP2_PATH" \
     --task_name "${TASK_NAME:-controlled_${ABLATION}_${DATASET:-all}_${TMFM_OUTPUT:-text}}" \
     --val_interval "${VAL_INTERVAL:-1}" \
+    --val_batch_size "${VAL_BATCH_SIZE:-4}" \
     --val_print_interval "${VAL_PRINT_INTERVAL:-100}" \
     --auto_resume \
     "${extra_args[@]}" \

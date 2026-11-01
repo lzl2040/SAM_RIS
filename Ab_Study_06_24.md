@@ -47,6 +47,12 @@ RefCOCO+/UNC、RefCOCOg/UMD，不包含 Google 划分。
 单集默认验证本集；混合默认验证 RefCOCO。
 可通过 `--val_dataset`、`--val_split_by` 显式指定，但四组应保持一致。
 
+验证默认将同一对象的最多 4 句描述合批（`VAL_BATCH_SIZE` /
+`--val_batch_size`），仍遍历全部描述，在 GPU 上累计逐句 IoU 后计算
+mIoU/oIoU/Precision，不保存图片。可设为 1 对照原逐句方式；显存不足时
+降低该值。`--val_amp` 可选开启验证 AMP，默认关闭，开启可能产生指标数值
+差异，四组需统一。验证目前仍由 rank 0 单卡执行，未做多卡分片。
+
 新代码修复了 Q-Former 特征提取的无梯度问题，以及 query tokens 被重新冻结、
 可训练 no-mask embedding 未写入 checkpoint 的问题。因此四组（包括 full）
 都应新训；历史完整模型只可作为旧结果，不是本组 full。

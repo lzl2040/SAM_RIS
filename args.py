@@ -25,6 +25,10 @@ def get_parser():
                         help="Validation dataset; defaults to training dataset, or refcoco for mixed training.")
     parser.add_argument("--val_split_by", choices=["unc", "umd", "google"], default=None)
     parser.add_argument("--seed", type=int, default=14159265)
+    parser.add_argument("--val_batch_size", type=int, default=4,
+                        help="Maximum number of captions per object evaluated in one forward pass.")
+    parser.add_argument("--val_amp", action="store_true",
+                        help="Enable CUDA AMP during validation; may slightly change metrics.")
     parser.add_argument("--exclude_eval_images", action="store_true",
                         help="Remove training refs whose images occur in any loaded dataset's held-out refs.")
     parser.add_argument("--controlled_visuals", action="store_true",
