@@ -50,6 +50,9 @@ def get_transform(args):
     return T.Compose(transforms), T.Compose(cnn_transform)
 
 def get_dataset(image_set, transform, cnn_transform, args, eval_mode=False):
+    if args.dataset in ("qata", "mosmed"):
+        from data.dataset_medical import MedicalReferDataset
+        return MedicalReferDataset(args, image_set, transform, cnn_transform, eval_mode)
     from data.dataset_refer_bert import ReferDataset
     if args.dataset == "all" and not eval_mode:
         # use refcocog umd, we suppose refcocog google contains the val images from refcocog umd

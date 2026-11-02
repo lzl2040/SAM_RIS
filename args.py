@@ -21,7 +21,7 @@ def get_parser():
                         default="full", help="Controlled SAM2 ablation; all modes keep the same Q-Former.")
     parser.add_argument("--tmfm_output", choices=["text", "query", "all", "cls"], default="text",
                         help="Output tokens of the second Q-Former pass when TMFM is enabled.")
-    parser.add_argument("--val_dataset", choices=["refcoco", "refcoco+", "refcocog"], default=None,
+    parser.add_argument("--val_dataset", choices=["refcoco", "refcoco+", "refcocog", "qata", "mosmed"], default=None,
                         help="Validation dataset; defaults to training dataset, or refcoco for mixed training.")
     parser.add_argument("--val_split_by", choices=["unc", "umd", "google"], default=None)
     parser.add_argument("--seed", type=int, default=14159265)
@@ -122,8 +122,10 @@ def get_parser():
     parser.add_argument("--distributed", action='store_true')
     
     parser.add_argument('--refer_data_root', default=os.environ.get("REFER_DATA_ROOT", "/home/v-zuoleili/Data/coco"), help='REFER dataset root directory')
+    parser.add_argument("--medical_data_root", default=os.environ.get("MEDICAL_DATA_ROOT", "/data2/lizuolei/data"),
+                        help="Parent of QaTa-COV19/ and MosMedDataPlus/.")
     parser.add_argument('--dataset', default='all', help='refcoco, refcoco+, refcocog, a2d, ytvos, joint'
-                                                             'refs+ytvos')
+                                                             'refs+ytvos; qata, mosmed for medical referring segmentation')
 
     parser.add_argument('--split', default='train', help='only used when testing')
     parser.add_argument('--splitBy', default='unc', help='change to umd or google when the dataset is G-Ref (RefCOCOg)')

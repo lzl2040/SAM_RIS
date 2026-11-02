@@ -117,6 +117,8 @@ class SAM2_RIS(nn.Module):
             "grad_accumulation_steps": args.grad_accumulation_steps,
             "world_size": int(os.environ.get("WORLD_SIZE", "1")) if args.distributed else 1,
         }
+        if args.dataset in ("qata", "mosmed"):
+            self.experiment_config["medical_data_root"] = args.medical_data_root
         self.blip2_qformer = load_blip2_qformer(args.blip2_path, args.blip2_vit_model)
         # multi model queries
         self.query_resizer = FeatureResizer(

@@ -427,6 +427,9 @@ def get_transform(args):
     return T.Compose(transforms), T.Compose(cnn_transform)
 
 def get_dataset(image_set, image_transforms, target_transforms, cnn_transforms, args, eval_mode=False):
+    if args.dataset in ("qata", "mosmed"):
+        from data.dataset_medical import MedicalReferDataset
+        return MedicalReferDataset(args, image_set, image_transforms, cnn_transforms, eval_mode)
     from data.dataset_refer_bert import ReferDataset
     ds = ReferDataset(args,
                       split=image_set,

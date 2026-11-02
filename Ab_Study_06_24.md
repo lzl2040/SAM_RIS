@@ -1,5 +1,38 @@
 # Ablation Study for AAAI
 
+## 医学 referring segmentation 数据
+
+`--dataset qata` / `--dataset mosmed` 可用于 `train_with_val.py`、
+`test.py` 和 `benchmark_validation.py`；不改变现有 RefCOCO 数据加载。
+原始数据分别来自用户指定的 Kaggle QaTa-COV19、MosMedData+，
+文本描述和 train/val/test 划分来自 [LViT 官方公开标注](https://github.com/HUANGLIZI/LViT)。
+QaTa 明确使用原始包的 **v2**，不混入同名的 v1 或无对应描述的对照组。
+
+```bash
+# 与 coco 同级下载，解压并生成 anns/{train,val,test}.json；需要 openpyxl。
+python prepare_medical.py --data_root /data2/lizuolei/data
+# 已下载时跳过联网；--dataset qata 或 mosmed 可只处理一个。
+python prepare_medical.py --data_root /data2/lizuolei/data --skip_download
+
+# 预训练权重、WORK_DIR 等仍沿用下文的环境变量配置。
+export MEDICAL_DATA_ROOT=/data2/lizuolei/data
+DATASET=qata ABLATION=full bash train_with_val_new.sh
+DATASET=mosmed ABLATION=full bash train_with_val_new.sh
+```
+
+数据目录为 `$MEDICAL_DATA_ROOT/QaTa-COV19/`、`MosMedDataPlus/`，
+各含 `dataset.zip`、`raw/`、`annotations/`、`anns/`。
+划分数量（train/val/test）：QaTa **5716/1429/2113**，
+MosMed **2183/273/273**。脚本拒绝缺失/歧义配对、尺寸不一致及跨划分同名图像。
+这些是原公开划分，不额外承诺患者级互斥。
+灰度 PNG 转三通道 RGB，掩码按 `>0` 二值化；保留原始文字，不随机生成描述，
+不引入可能颠倒 left/right 语义的翻转。每张图一条描述，因此之前的
+`val_batch_size` 句子批处理对这两套数据通常没有提速作用。
+
+这是把公开医学图像、掩码和文本接入当前 SAM_RIS，**不是复现 MedMARS 模型或其完整实验协议**。
+仍沿用当前训练损失和验证的 mIoU/oIoU/precision；未额外实现医学论文的 Dice 等报告口径。
+不要直接将这些指标与采用不同预处理、划分或 Dice 定义的论文数字对比。
+
 ## 小修受控消融（新实验，不替换下方历史结果）
 
 入口为 `train_with_val.py` / `train_with_val_new.sh`，四组均保留同一

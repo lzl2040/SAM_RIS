@@ -25,3 +25,4 @@ pyarrow==11.0.0
 lmdb
 pycocotools
 tqdm
+openpyxl
