@@ -2,16 +2,23 @@
 set -euo pipefail
 
 # Format: https://github.com/jiaqihuang01/DETRIS/blob/main/tools/prepare_datasets.md
-# Usage: bash prepare.sh [all|data|lmdb|weights]
+# Usage: bash prepare.sh [all|data|lmdb|weights|medical]
+# Medical only: bash prepare.sh medical [--dataset all|qata|mosmed] [--skip_download]
 MODE="${1:-all}"
 case "$MODE" in
-    all|data|lmdb|weights) ;;
-    *) echo "Usage: bash prepare.sh [all|data|lmdb|weights]" >&2; exit 2 ;;
+    all|data|lmdb|weights|medical) ;;
+    *) echo "Usage: bash prepare.sh [all|data|lmdb|weights|medical]" >&2; exit 2 ;;
 esac
+
+PYTHON="${PYTHON:-python}"
+if [[ "$MODE" == medical ]]; then
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    exec "$PYTHON" "$SCRIPT_DIR/prepare_medical.py" \
+        --data_root "${MEDICAL_DATA_ROOT:-/data2/lizuolei/data}" "${@:2}"
+fi
 
 REFER_DATA_ROOT="${REFER_DATA_ROOT:-/home/v-zuoleili/Data/coco}"
 PRETRAIN_WEIGHT_ROOT="${PRETRAIN_WEIGHT_ROOT:-/home/v-zuoleili/Pretrain}"
-PYTHON="${PYTHON:-python}"
 
 download() {
     if ! wget -q -c "$1"; then

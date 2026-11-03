@@ -9,13 +9,17 @@
 QaTa 明确使用原始包的 **v2**，不混入同名的 v1 或无对应描述的对照组。
 
 ```bash
-# 与 coco 同级下载，解压并生成 anns/{train,val,test}.json；需要 openpyxl。
-python prepare_medical.py --data_root /data2/lizuolei/data
-# 已下载时跳过联网；--dataset qata 或 mosmed 可只处理一个。
-python prepare_medical.py --data_root /data2/lizuolei/data --skip_download
+export MEDICAL_DATA_ROOT=/data2/lizuolei/data
+# 医疗专用入口：下载、解压并生成 anns/{train,val,test}.json；需要 openpyxl、Pillow。
+# 不下载 COCO、REFER 标注、DETRIS 工具或权重，也不生成 LMDB。
+bash prepare.sh medical
+# 只处理一套；已下载时可加 --skip_download。
+bash prepare.sh medical --dataset qata
+bash prepare.sh medical --dataset mosmed --skip_download
+# all/data/lmdb/weights 的原行为不变；权重可单独 bash prepare.sh weights。
+# 可用 PYTHON=/path/to/python 选择数据准备所用的解释器。
 
 # 预训练权重、WORK_DIR 等仍沿用下文的环境变量配置。
-export MEDICAL_DATA_ROOT=/data2/lizuolei/data
 DATASET=qata ABLATION=full bash train_with_val_new.sh
 DATASET=mosmed ABLATION=full bash train_with_val_new.sh
 ```
