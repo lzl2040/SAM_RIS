@@ -86,9 +86,13 @@ mIoU/oIoU/Precision，不保存图片。可设为 1 对照原逐句方式；显�
 降低该值。`--val_amp` 可选开启验证 AMP，默认关闭，开启可能产生指标数值
 差异，四组需统一。验证目前仍由 rank 0 单卡执行，未做多卡分片。
 
-新代码修复了 Q-Former 特征提取的无梯度问题，以及 query tokens 被重新冻结、
-可训练 no-mask embedding 未写入 checkpoint 的问题。因此四组（包括 full）
-都应新训；历史完整模型只可作为旧结果，不是本组 full。
+已恢复旧版实际训练行为：四组的 Q-Former 和 query tokens 均冻结，
+特征提取使用 `no_grad`，投影层、mask decoder、no-mask embedding 及启用的
+MMA 仍可训练。不额外切换 Q-Former 到 eval 模式，保留旧版 train/eval 行为。
+之前 `qformer_grad=True` 的受控实验与恢复后的设置不同，不能续训其异常权重；
+需换新的 `TASK_NAME`（如 `1103_mm_sam_full_all_frozen`）从预训练权重重新开始，
+也不要通过 `--pretrain` 加载这些异常任务权重。可训练 no-mask embedding 仍写入 checkpoint。
+四组（包括 full）都应按统一设置新训；历史完整模型只可作为旧结果，不是本组 full。
 checkpoint 保存实验设置，配置不同或缺少设置的旧文件不能用于续训。
 `--pretrain` 仅用于有意初始化，不是续训；严格受控比较不要用完整任务模型
 初始化某一消融组。SAM2.1 与论文原 SAM2 也不能混用为同一骨干。

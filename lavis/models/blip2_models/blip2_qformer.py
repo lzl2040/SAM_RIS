@@ -385,8 +385,10 @@ class Blip2Qformer(Blip2Base):
         return itm_logit
 
     @torch.no_grad()
-    def extract_features(self, samples, mode="multimodal", visual=False):
-        return self.extract_features_with_grad(samples, mode=mode, visual=visual)
+    def extract_features(self, samples, mode="multimodal", visual=False,
+                         use_tmfm=True, tmfm_output="text"):
+        return self.extract_features_with_grad(
+            samples, mode=mode, visual=visual, use_tmfm=use_tmfm, tmfm_output=tmfm_output)
 
     def extract_features_with_grad(self, samples, mode="multimodal", visual=False,
                                    use_tmfm=True, tmfm_output="text"):

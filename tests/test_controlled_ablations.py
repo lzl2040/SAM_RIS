@@ -104,23 +104,42 @@ class ControlledAblationTests(unittest.TestCase):
         args = self.parser.parse_args(["--ablation", mode, "--tmfm_output", output])
         return namespace["SAM2_RIS"](sam, args, device="cpu")
 
-    def test_four_modes_keep_qformer_and_route_gradients(self):
+    def test_four_modes_freeze_qformer_but_train_projection_and_active_fusion(self):
         for mode, mma, tmfm in [
             ("baseline", False, False), ("mma_only", True, False),
             ("tmfm_only", False, True), ("full", True, True),
         ]:
             with self.subTest(mode=mode):
                 model = self.model(mode)
-                query, prompts, _, _ = model.generate_queries(torch.randn(1, 2, 4), ["object"])
+                model.train()
+                frozen_before = {key: value.detach().clone()
+                                 for key, value in model.blip2_qformer.state_dict().items()}
+                projection_before = model.query_resizer.fc.weight.detach().clone()
+                fusion_before = model.sam2_model.image_encoder.fusion.weight.detach().clone()
+                optimizer = torch.optim.AdamW(
+                    [parameter for parameter in model.parameters() if parameter.requires_grad], lr=2e-4)
+                query, prompts, features, _ = model.generate_queries(torch.randn(1, 2, 4), ["object"])
                 self.assertEqual(query is not None, mma)
                 self.assertEqual(model.blip2_qformer.Qformer.bert.calls, 2 if tmfm else 1)
                 self.assertEqual(prompts.shape, (1, 3 if tmfm else 4, 256))
                 self.assertEqual(model.sam2_model.image_encoder.fusion.weight.requires_grad, mma)
                 self.assertFalse(model.sam2_model.image_encoder.backbone.weight.requires_grad)
-                prompts.square().mean().backward()
-                self.assertIsNotNone(model.blip2_qformer.query_tokens.grad)
-                self.assertIsNotNone(model.blip2_qformer.Qformer.bert.embedding.weight.grad)
-                self.assertIsNone(model.blip2_qformer.visual_encoder.weight.grad)
+                self.assertTrue(model.blip2_qformer.Qformer.training)
+                self.assertFalse(features.requires_grad)
+                loss = prompts[..., 0].square().mean()
+                if mma:
+                    self.assertFalse(query.requires_grad)
+                    loss = loss + model.sam2_model.image_encoder.fusion(query).square().mean()
+                loss.backward()
+                self.assertGreater(model.query_resizer.fc.weight.grad.abs().sum().item(), 0)
+                for parameter in model.blip2_qformer.parameters():
+                    self.assertFalse(parameter.requires_grad)
+                    self.assertIsNone(parameter.grad)
+                optimizer.step()
+                for key, value in model.blip2_qformer.state_dict().items():
+                    torch.testing.assert_close(value, frozen_before[key], rtol=0, atol=0)
+                self.assertFalse(torch.equal(projection_before, model.query_resizer.fc.weight))
+                self.assertEqual(torch.equal(fusion_before, model.sam2_model.image_encoder.fusion.weight), not mma)
                 with torch.no_grad():
                     self.assertFalse(model.generate_queries(torch.randn(1, 2, 4), ["object"])[1].requires_grad)
 
@@ -141,19 +160,23 @@ class ControlledAblationTests(unittest.TestCase):
         model = self.model("baseline")
         state = Mock(state_dict=lambda: {})
         checkpoint, saved = namespace["make_checkpoint"](model, state, state, state, 0, .5, 1.)
-        self.assertIn("blip2_qformer.query_tokens", saved)
         self.assertIn("sam2_model.sam_prompt_encoder.no_mask_embed.weight", saved)
         self.assertEqual(checkpoint["experiment_config"]["ablation"], "baseline")
+        self.assertFalse(checkpoint["experiment_config"]["qformer_grad"])
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.pth"
             torch.save(checkpoint, path)
             restored = self.model("baseline")
             namespace["load_resume_checkpoint"](path, restored, state, state, state, "cpu", Mock())
-            torch.testing.assert_close(restored.blip2_qformer.query_tokens,
-                                       model.blip2_qformer.query_tokens)
+            torch.testing.assert_close(restored.sam2_model.sam_prompt_encoder.no_mask_embed.weight,
+                                       model.sam2_model.sam_prompt_encoder.no_mask_embed.weight)
             for other in [self.model("full"), self.model("mma_only")]:
                 with self.assertRaisesRegex(ValueError, "configuration differs"):
                     namespace["load_resume_checkpoint"](path, other, state, state, state, "cpu", Mock())
+            checkpoint["experiment_config"] = dict(model.experiment_config, qformer_grad=True)
+            torch.save(checkpoint, path)
+            with self.assertRaisesRegex(ValueError, "configuration differs"):
+                namespace["load_resume_checkpoint"](path, model, state, state, state, "cpu", Mock())
             checkpoint.pop("experiment_config")
             torch.save(checkpoint, path)
             with self.assertRaisesRegex(ValueError, "configuration differs"):

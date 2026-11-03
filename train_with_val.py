@@ -371,6 +371,11 @@ def main():
         fusion_params = sum(p.numel() for _, p in fusion_params_list)
         logger.info(f"Number of total parameters: {param_count_to_gb(total_params)} GB")
         logger.info(f"Number of trainable parameters: {param_count_to_gb(trainable_params)} GB")
+        logger.info(
+            "Q-Former trainable parameters: %d; feature extraction gradients: %s",
+            sum(p.numel() for p in model_without_ddp.blip2_qformer.parameters() if p.requires_grad),
+            model_without_ddp.experiment_config["qformer_grad"],
+        )
         # logger.info(f"Number of blip2qformer parameters: {param_count_to_gb(blip2_qformer_params)} GB")
         # logger.info(f"Number of qformer parameters: {param_count_to_gb(qformer_params)} GB")
         logger.info(f"Number of sam image encoder parameters: {param_count_to_gb(image_encoder_params)} GB")

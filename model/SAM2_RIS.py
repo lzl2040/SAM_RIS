@@ -99,7 +99,7 @@ class SAM2_RIS(nn.Module):
         self.experiment_config = {
             "ablation": args.ablation,
             "tmfm_output": args.tmfm_output if self.use_tmfm else None,
-            "qformer_grad": True,
+            "qformer_grad": False,
             "model_cfg": args.model_cfg,
             "blip2_vit_model": args.blip2_vit_model,
             "blip2_path": args.blip2_path,
@@ -162,20 +162,14 @@ class SAM2_RIS(nn.Module):
                 param.requires_grad = True
                 continue
             param.requires_grad = False
-        # qformer可训练
-        for name, param in self.blip2_qformer.named_parameters():
-            if "Qformer" in name:
-                # print(name)
-                param.requires_grad = True
-                continue
-            param.requires_grad = False
-        self.blip2_qformer.query_tokens.requires_grad_(True)
+        # Match legacy feature extraction: freeze Q-Former and query tokens.
+        self.blip2_qformer.requires_grad_(False)
 
     def set_model_save_path(self, model_save_path):
         self.save_path = model_save_path
 
     def generate_queries(self, blip2_imgs, repeat_catpipns):
-        blip2_output, final_cross_attention_score = self.blip2_qformer.extract_features_with_grad(
+        blip2_output, final_cross_attention_score = self.blip2_qformer.extract_features(
             {"image": blip2_imgs, "text_input": repeat_catpipns}, mode="multimodal",
             use_tmfm=self.use_tmfm, tmfm_output=self.args.tmfm_output)
 
